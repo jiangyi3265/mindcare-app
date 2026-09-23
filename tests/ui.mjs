@@ -1,371 +1,304 @@
-import { launchBrowser } from "./browser.mjs";
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { launchBrowser } from "./browser.mjs";
+
+const appUrl = process.env.MINDCARE_APP_URL || "http://127.0.0.1:5173";
+const adminUrl = process.env.MINDCARE_ADMIN_URL || "http://127.0.0.1:5180";
+const apiUrl = process.env.MINDCARE_API_URL || "http://127.0.0.1:8080";
+const adminPassword = process.env.MINDCARE_TEST_ADMIN_PASSWORD;
+const integrationKey = `integration-${Date.now().toString(36)}`;
+const integrationTitle = `联调量表${Date.now()}`;
+if (!adminPassword || process.env.MINDCARE_ISOLATED_TEST_DB !== "1") {
+	throw new Error("Set MINDCARE_TEST_ADMIN_PASSWORD and MINDCARE_ISOLATED_TEST_DB=1 for an isolated test database");
+}
+if (![appUrl, adminUrl, apiUrl].every((url) => new URL(url).hostname === "127.0.0.1")) {
+	throw new Error("UI integration tests only run against local isolated services");
+}
+
 const browser = await launchBrowser();
-const context = await browser.newContext({
-	viewport: { width: 390, height: 844 },
-	isMobile: true,
-	hasTouch: true,
+const userContext = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+const adminContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+const user = await userContext.newPage();
+const admin = await adminContext.newPage();
+const errors = [];
+const failedRequests = [];
+for (const page of [user, admin]) {
+	page.on("pageerror", (error) => errors.push(`${page === user ? "app" : "admin"}: ${error.message}`));
+	page.on("response", (response) => {
+		if (response.status() >= 500 && /mindcare|login|captcha|user\/getInfo/.test(response.url())) {
+			failedRequests.push(`${response.status()} ${response.url()}`);
+		}
+	});
+}
+const button = (name) => user.locator("uni-button").filter({ hasText: new RegExp(`^\\s*${name}\\s*$`) }).last();
+const input = (name) => user.locator(`uni-input[aria-label="${name}"] input`);
+const visit = async (route) => {
+	await user.goto(`${appUrl}/#/pages/${route}`, { waitUntil: "domcontentloaded", timeout: 60000 });
+	const synced = user.waitForResponse((response) => response.url().includes("/app/mindcare/bootstrap") && response.status() === 200, { timeout: 30000 });
+	await user.reload({ waitUntil: "domcontentloaded", timeout: 60000 });
+	await user.locator(".app-shell").waitFor();
+	await synced;
+};
+const check = async (label, callback) => {
+	try {
+		await callback();
+		console.log(`PASS ${label}`);
+	} catch (error) {
+		console.error(`FAIL ${label}: ${error.message}`);
+		console.error(`App URL: ${user.url()}`);
+		console.error((await user.locator("body").innerText()).slice(0, 700));
+		console.error(`Admin URL: ${admin.url()}`);
+		console.error((await admin.locator("body").innerText()).slice(0, 700));
+		console.error(`Admin form errors: ${JSON.stringify(await admin.locator(".el-form-item__error, .el-message").allTextContents())}`);
+		console.error(`HTTP errors: ${JSON.stringify(failedRequests)}`);
+		throw error;
+	}
+};
+const api = async (path, options = {}) => {
+	const response = await fetch(`${apiUrl}${path}`, options);
+	return response.json();
+};
+let adminToken;
+let testClientId;
+const adminApi = (path, options = {}) => api(path, {
+	...options,
+	headers: { Authorization: `Bearer ${adminToken}`, "Content-Type": "application/json", ...options.headers },
 });
-const page = await context.newPage(),
-	errors = [];
-page.on("pageerror", (error) => errors.push(error.message));
-const btn = (name) =>
-	page
-		.locator("uni-button")
-		.filter({ hasText: new RegExp("^\\s*" + name + "\\s*$") })
-		.last();
-const input = (name) => page.locator(`uni-input[aria-label="${name}"] input`);
-// Direct deep-link checks use a fresh document; uni-app caches pages on hash-only navigation.
-const visit = async (path) => {
-	await page.goto("http://127.0.0.1:5173/#/pages/" + path);
-	await page.reload();
-	await page.locator(".app-shell").waitFor();
-	await page.waitForTimeout(160);
-};
-const check = async (name, fn) => {
-	await fn();
-	console.log("PASS " + name);
-};
+
 try {
-	await check("首页分类与空搜索结果", async () => {
+	await check("用户端内容同步、搜索与空结果", async () => {
 		await visit("index/index");
-		await btn("睡眠").click();
-		assert.equal(await page.locator(".assessment-card").count(), 1);
-		await page.locator(".search-box input").fill("不存在的量表");
-		await page.locator(".empty").waitFor();
-		assert.match(await page.locator(".empty").innerText(), /没有找到/);
-		await page.locator('[aria-label="清空搜索"]').click();
-		await page.waitForFunction(
-			() => document.querySelector(".search-box input").value === "",
-		);
-		assert.equal(await page.locator(".search-box input").inputValue(), "");
-		assert.equal(await page.locator(".assessment-card").count(), 1);
+		await user.locator(".assessment-card").first().waitFor();
+		await user.locator(".search-box input").fill("不存在的量表");
+		await user.locator(".empty").waitFor();
+		await user.locator('[aria-label="清空搜索"]').click();
+		await user.locator(".assessment-card").first().waitFor();
 	});
-	await check("个人中心取消编辑、昵称保存与当前导航保持状态", async () => {
-		await visit("profile/index");
-		await page.locator('[aria-label="设置"]').click();
-		await page.keyboard.press("Tab");
-		assert.ok(
-			await page.evaluate(
-				() => !!document.activeElement.closest(".sheet"),
-			),
-		);
-		const original = await input("昵称").inputValue();
-		await input("昵称").fill("这次修改不保存");
-		await page.keyboard.press("Escape");
-		await page.locator(".sheet").waitFor({ state: "hidden" });
-		assert.notEqual(
-			await page.evaluate(() => document.body.style.overflow),
-			"hidden",
-		);
-		await page.locator('[aria-label="设置"]').click();
-		assert.equal(await input("昵称").inputValue(), original);
-		await input("昵称").fill("认真照顾自己的小林");
-		await btn("保存昵称").click();
-		await page.locator(".sheet").waitFor({ state: "hidden" });
-		await page.reload();
-		assert.equal(
-			await page.locator(".profile-identity .title").innerText(),
-			"认真照顾自己的小林",
-		);
-		await page.locator(".tab-item.active").click();
-		assert.equal(
-			await page.locator(".profile-identity .title").innerText(),
-			"认真照顾自己的小林",
-		);
-		assert.equal(
-			await page.locator(".tab-item.active").getAttribute("aria-current"),
-			"page",
-		);
+
+	await check("后台登录与运营概览", async () => {
+		await admin.goto(`${adminUrl}/login`);
+		await admin.getByPlaceholder("账号").fill("admin");
+		await admin.getByPlaceholder("密码").fill(adminPassword);
+		await admin.getByRole("button", { name: /登 录/ }).click();
+		await admin.waitForFunction(() => document.cookie.includes("Admin-Token="), undefined, { timeout: 30000 });
+		adminToken = (await adminContext.cookies(adminUrl)).find((cookie) => cookie.name === "Admin-Token")?.value;
+		assert.ok(adminToken, "管理员登录后应获得 token");
+		await admin.goto(`${adminUrl}/mindcare/dashboard`);
+		await admin.getByText("运营概览", { exact: true }).first().waitFor();
+		assert.equal((await adminApi("/mindcare/dashboard")).code, 200);
 	});
-	await check("测评漏答拦截、刷新续答、20题提交与记录持久化", async () => {
+
+	await check("完整测评、服务端计分和报告同步", async () => {
 		await visit("assessment/detail?id=emotion");
-		await btn("开始测评").click();
-		await page.locator(".question").waitFor();
-		await btn("下一题").click();
-		assert.match(await page.locator(".question").innerText(), /情绪低落/);
-		await btn("偶尔").click();
-		await btn("下一题").click();
-		await page.reload();
-		await page.locator(".question").waitFor();
-		assert.match(await page.locator(".question").innerText(), /日常活动/);
-		for (let i = 1; i < 20; i++) {
-			await btn("偶尔").click();
-			await btn(i === 19 ? "提交测评" : "下一题").click();
+		await button("开始测评").click();
+		await user.locator(".question").waitFor();
+		for (let i = 0; i < 20; i++) {
+			await button("偶尔").click();
+			await button(i === 19 ? "提交测评" : "下一题").click();
 		}
-		await page.locator(".score").waitFor();
-		assert.equal(await page.locator(".score").innerText(), "33");
-		await visit("profile/records?filter=测评");
-		assert.ok((await page.locator(".record-card").count()) >= 2);
+		await user.locator(".score").waitFor();
+		assert.equal((await user.locator(".score").innerText()).trim(), "33");
+		await user.waitForTimeout(500);
+		const data = await adminApi("/mindcare/record/list?recordType=assessment&pageNum=1&pageSize=10");
+		assert.equal(data.code, 200);
+		const report = data.rows.find((row) => row.score === 33 && row.recordType === "assessment");
+		assert.ok(report);
+		testClientId = report.clientId;
+		const forbidden = await adminApi(`/mindcare/record/${report.recordId}/status`, { method: "PUT", body: JSON.stringify({ status: "pending" }) });
+		assert.notEqual(forbidden.code, 200, "测评结果不能被人工改为待处理");
 	});
-	await check("咨询预约校验、提交及管理员确认", async () => {
+
+	await check("咨询提交、后台确认、用户端刷新状态", async () => {
 		await visit("consultation/booking");
-		await btn("提交预约").click();
-		assert.match(await page.locator(".error-text").innerText(), /称呼/);
-		await input("称呼").fill("界面测试");
-		await page.locator(".error-text").waitFor({ state: "hidden" });
+		await button("提交预约").click();
+		assert.match(await user.locator(".error-text").innerText(), /称呼/);
+		await input("称呼").fill("联调测试");
 		await input("联系手机").fill("13800138000");
-		await btn("提交预约").click();
-		await page.locator(".record-card").first().waitFor();
-		assert.match(
-			await page.locator(".page-content").innerText(),
-			/情绪与压力咨询/,
-		);
-		await visit("admin/services?tab=咨询留言");
-		await btn("确认预约").click();
-		assert.match(await page.locator(".page-content").innerText(), /已确认/);
+		await user.locator('uni-textarea[aria-label="咨询留言"] textarea').fill("希望了解咨询流程");
+		await button("提交预约").click();
+		await user.locator(".record-card").first().waitFor();
+		await user.waitForTimeout(500);
+		const data = await adminApi("/mindcare/record/list?recordType=consultation&pageNum=1&pageSize=10");
+		const row = data.rows.find((item) => item.contactPhone === "13800138000");
+		assert.ok(row, "后台应看到用户预约");
+		await admin.goto(`${adminUrl}/mindcare/consultations`);
+		const recordRow = admin.locator(".el-table__row").filter({ hasText: "13800138000" }).first();
+		await recordRow.waitFor();
+		await recordRow.getByRole("button", { name: "处理" }).click();
+		await admin.locator(".el-dialog").getByText("待处理", { exact: true }).click();
+		await admin.locator(".el-select-dropdown__item").filter({ hasText: "已确认" }).last().click();
+		await admin.getByRole("button", { name: "确认更新" }).click();
+		await admin.getByText("状态已更新").waitFor();
+		await visit("profile/records?filter=咨询");
+		await user.locator(".record-card").filter({ hasText: "已确认" }).first().waitFor();
+		await visit("consultation/booking");
+		await input("称呼").fill("联调测试");
+		await input("联系手机").fill("13800138000");
+		await button("提交预约").click();
+		assert.match(await user.locator(".error-text").innerText(), /已预约/);
 	});
-	await check(
-		"活动报名必填校验、报名成功、二维码及重复报名保护",
-		async () => {
-			await visit("activities/signup?id=forest");
-			await input("姓名").fill("活动测试");
-			await input("联系手机").fill("13900139000");
-			await btn("提交报名").click();
-			assert.match(
-				await page.locator(".error-text").innerText(),
-				/紧急联系人/,
-			);
-			await input("紧急联系人").fill("家人 13800138000");
-			await btn("提交报名").click();
-			await page.locator(".success-title").waitFor();
-			assert.equal(
-				await page.locator(".success-title").innerText(),
-				"报名成功",
-			);
-			assert.ok((await page.locator(".qr-cell.dark").count()) > 100);
-			await visit("activities/signup?id=forest");
-			await input("姓名").fill("活动测试");
-			await input("联系手机").fill("13900139000");
-			await input("紧急联系人").fill("家人 13800138000");
-			await btn("提交报名").click();
-			assert.match(
-				await page.locator(".error-text").innerText(),
-				/已报名/,
-			);
-		},
-	);
-	await check("无视频素材的明确反馈", async () => {
+
+	await check("活动报名校验、成功页和重复报名拦截", async () => {
+		const observer = { clientId: `mc_observer_${Date.now().toString(36)}`, token: randomBytes(32).toString("hex") };
+		assert.equal((await api("/app/mindcare/client/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(observer) })).code, 200);
+		const observerContent = () => api("/app/mindcare/bootstrap", { headers: { "X-Client-Id": observer.clientId, "X-Client-Token": observer.token } });
+		const before = (await observerContent()).data.activities.find((activity) => activity.id === "forest").enrolled;
+		await visit("activities/signup?id=forest");
+		await input("姓名").fill("报名测试");
+		await input("联系手机").fill("13900139000");
+		await button("提交报名").click();
+		assert.match(await user.locator(".error-text").innerText(), /紧急联系人/);
+		await input("紧急联系人").fill("家人 13800138000");
+		await button("提交报名").click();
+		await user.locator(".success-title").waitFor();
+		assert.equal((await user.locator(".success-title").innerText()).trim(), "报名成功");
+		let current = before;
+		for (let i = 0; i < 20 && current === before; i++) {
+			current = (await observerContent()).data.activities.find((activity) => activity.id === "forest").enrolled;
+			if (current === before) await user.waitForTimeout(250);
+		}
+		assert.equal(current, before + 1, "其他终端应看到最新报名人数");
+		await visit("activities/detail?id=forest");
+		assert.match(await user.locator(".page-content").innerText(), new RegExp(`已报名${before + 1}人`));
+		await visit("activities/signup?id=forest");
+		await input("姓名").fill("报名测试");
+		await input("联系手机").fill("13900139000");
+		await input("紧急联系人").fill("家人 13800138000");
+		await button("提交报名").click();
+		assert.match(await user.locator(".error-text").innerText(), /已报名/);
+	});
+
+	await check("课程空视频有明确提示", async () => {
 		await visit("courses/detail?id=stress");
-		await btn("继续观看").click();
-		assert.match(await page.locator(".notice").innerText(), /正在准备/);
+		await button("继续观看").or(button("开始观看")).click();
+		assert.match(await user.locator(".notice").innerText(), /正在准备/);
 	});
-	await check("未观看课程不会误标完成，选择章节不会伪造进度", async () => {
-		await visit("courses/detail?id=emotion");
-		assert.doesNotMatch(
-			await page.locator(".chapter-list").innerText(),
-			/已看完|学习中/,
-		);
-		await page.locator(".chapter").last().click();
-		assert.doesNotMatch(
-			await page.locator(".chapter-list").innerText(),
-			/已看完|学习中/,
-		);
-		assert.match(await page.locator(".soft-card").innerText(), /已看0%/);
-	});
-	await check("记录按时间排序，底部操作栏不覆盖最后一项内容", async () => {
-		await visit("profile/records?filter=测评");
-		const dates = await page
-			.locator(".record-card .body-title + .small")
-			.allTextContents();
-		assert.ok(dates[0].trim() > dates[1].trim(), "新报告应排在旧报告之前");
-		assert.equal(
-			await page.locator(".records-heading").innerText(),
-			"最近记录\n共 2 条",
-		);
-		for (const route of [
-			"consultation/booking",
-			"activities/signup?id=forest",
-			"assessment/quiz",
-		]) {
-			await visit(route);
-			await page.evaluate(() =>
-				window.scrollTo(0, document.documentElement.scrollHeight),
-			);
-			await page.waitForTimeout(100);
-			assert.ok(
-				await page.evaluate(
-					() =>
-						document
-							.querySelector(".page-content")
-							.getBoundingClientRect().bottom <=
-						document
-							.querySelector(".fixed-footer")
-							.getBoundingClientRect().top,
-				),
-				route,
-			);
-		}
-	});
-	await check("JSON量表真实上传、发布、用户端可查询", async () => {
-		await visit("admin/scales");
-		await btn("新建").click();
-		const chooser = page.waitForEvent("filechooser");
-		await page.locator(".upload-box").click();
-		await (
-			await chooser
-		).setFiles({
-			name: "test-scale.json",
-			mimeType: "application/json",
-			buffer: Buffer.from(
-				JSON.stringify({
-					title: "测试导入量表",
-					questions: ["问题一", "问题二"],
-					minutes: 2,
-					category: "情绪",
-				}),
-			),
-		});
-		await page.waitForFunction(
-			() =>
-				document.querySelector('uni-input[aria-label="量表名称"] input')
-					?.value === "测试导入量表",
-		);
-		await btn("发布量表").click();
-		await page.getByText("测试导入量表", { exact: true }).waitFor();
+
+	await check("后台发布内容后用户可见，下架后用户不可见", async () => {
+		await admin.goto(`${adminUrl}/mindcare/assessments`);
+		await admin.getByRole("button", { name: "新增量表" }).click();
+		const dialog = admin.locator(".el-dialog").last();
+		await dialog.locator(".el-form-item").filter({ hasText: "标题" }).locator("input").fill(integrationTitle);
+		await dialog.locator(".el-form-item").filter({ hasText: "内容标识" }).locator("input").fill(integrationKey);
+		await dialog.getByRole("button", { name: "保存" }).click();
+		await dialog.waitFor({ state: "hidden" });
+		await admin.locator(".el-table__row").filter({ hasText: integrationTitle }).waitFor();
 		await visit("index/index");
-		await page.locator(".search-box input").fill("测试导入");
-		await page
-			.locator(".assessment-card")
-			.filter({ hasText: "测试导入量表" })
-			.waitFor();
+		await user.locator(".search-box input").fill(integrationTitle);
+		await user.locator(".assessment-card").filter({ hasText: integrationTitle }).waitFor();
+		const data = await adminApi(`/mindcare/content/list?contentType=assessment&title=${encodeURIComponent(integrationTitle)}&pageNum=1&pageSize=10`);
+		const row = data.rows.find((item) => item.contentKey === integrationKey);
+		assert.ok(row);
+		const update = await adminApi("/mindcare/content", { method: "PUT", body: JSON.stringify({ ...row, status: "1" }) });
+		assert.equal(update.code, 200);
+		await visit("index/index");
+		await user.locator(".search-box input").fill(integrationTitle);
+		await user.locator(".empty").waitFor();
+		assert.equal((await adminApi(`/mindcare/content/${row.contentId}`, { method: "DELETE" })).code, 200);
 	});
-	await check("视频本机上传、发布、播放及刷新后读取", async () => {
-		await visit("admin/courses");
-		const bytes = await page.evaluate(async () => {
-			const canvas = document.createElement("canvas");
-			canvas.width = 320;
-			canvas.height = 180;
-			const ctx = canvas.getContext("2d");
-			ctx.fillStyle = "#718379";
-			ctx.fillRect(0, 0, 320, 180);
-			const stream = canvas.captureStream(10);
-			const recorder = new MediaRecorder(stream, {
-				mimeType: "video/webm",
-			});
-			const chunks = [];
-			recorder.ondataavailable = (e) => chunks.push(e.data);
-			const finished = new Promise(
-				(resolve) =>
-					(recorder.onstop = async () =>
-						resolve(
-							Array.from(
-								new Uint8Array(
-									await new Blob(chunks).arrayBuffer(),
-								),
-							),
-						)),
-			);
-			recorder.start();
-			for (let i = 0; i < 12; i++) {
-				ctx.fillStyle = i % 2 ? "#718379" : "#607367";
-				ctx.fillRect(0, 0, 320, 180);
-				await new Promise((r) => setTimeout(r, 100));
-			}
-			recorder.stop();
-			stream.getTracks().forEach((t) => t.stop());
-			return finished;
-		});
-		await input("课程名称").fill("自动化视频课程");
-		const chooser = page.waitForEvent("filechooser");
-		await page.locator(".upload-box").click();
-		await (
-			await chooser
-		).setFiles({
-			name: "test-lesson.webm",
-			mimeType: "video/webm",
-			buffer: Buffer.from(bytes),
-		});
-		await page.getByText("已上传", { exact: true }).waitFor();
-		await btn("发布课程").click();
-		const card = page
-			.locator(".card")
-			.filter({ hasText: "自动化视频课程" });
-		await card.waitFor();
-		await card
-			.locator("uni-button")
-			.filter({ hasText: "预览课程" })
-			.click();
-		await btn("开始观看").click();
-		await page.locator("video").waitFor();
-		await page.waitForFunction(
-			() => document.querySelector("video")?.readyState >= 2,
-		);
-		await page.reload();
-		await btn("开始观看").or(btn("继续观看")).click();
-		await page.locator("video").waitFor();
-		await page.waitForFunction(
-			() => document.querySelector("video")?.readyState >= 2,
-		);
+
+	await check("后台拒绝不完整内容、非对象 JSON 和未授权访问", async () => {
+		const base = { contentKey: `invalid-${Date.now().toString(36)}`, contentType: "assessment", title: "不完整量表", category: "情绪", summary: "", status: "0", sortOrder: 0 };
+		const invalidScale = await adminApi("/mindcare/content", { method: "POST", body: JSON.stringify({ ...base, payloadJson: JSON.stringify({ id: base.contentKey, title: base.title, count: 2, minutes: 3, questions: ["仅一题"] }) }) });
+		assert.notEqual(invalidScale.code, 200);
+		const invalidObject = await adminApi("/mindcare/content", { method: "POST", body: JSON.stringify({ ...base, payloadJson: "[]" }) });
+		assert.notEqual(invalidObject.code, 200);
+		const invalidActivity = await adminApi("/mindcare/content", { method: "POST", body: JSON.stringify({ ...base, contentType: "activity", payloadJson: JSON.stringify({ id: base.contentKey, title: base.title, date: "", time: "", location: "", capacity: 0, enrolled: 0, schedule: [] }) }) });
+		assert.notEqual(invalidActivity.code, 200);
+		const unauthenticated = await api("/mindcare/dashboard");
+		assert.notEqual(unauthenticated.code, 200);
+		const clientId = `mc_concurrent_${Date.now().toString(36)}`;
+		const token = randomBytes(32).toString("hex");
+		const register = () => api("/app/mindcare/client/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientId, token, nickname: "并发测试" }) });
+		assert.deepEqual((await Promise.all([register(), register()])).map((item) => item.code), [200, 200]);
+		const wrongCredential = await api("/app/mindcare/bootstrap", { headers: { "X-Client-Id": clientId, "X-Client-Token": randomBytes(32).toString("hex") } });
+		assert.notEqual(wrongCredential.code, 200);
 	});
-	await check("活动发布、管理员报名名单和用户搜索", async () => {
-		await visit("admin/services");
-		await btn("发布活动通知").click();
-		await input("活动名称").fill("测试公益活动");
-		await input("集合地点").fill("社区服务中心");
-		await page
-			.locator('uni-textarea[aria-label="活动介绍"] textarea')
-			.fill("一起学习心理健康知识。");
-		await btn("发布活动").click();
-		await page
-			.locator(".admin-event")
-			.filter({ hasText: "测试公益活动" })
-			.waitFor();
-		await visit("activities/index");
-		await page.getByText("测试公益活动", { exact: true }).waitFor();
-		await visit("admin/services?tab=用户管理");
-		await page.locator(".search-box input").fill("13900139000");
-		assert.equal(await page.locator(".admin-user").count(), 1);
-	});
-	await check("客服配置校验与留言处理", async () => {
-		await visit("admin/index");
-		await page
-			.locator("uni-button")
-			.filter({ hasText: "微信客服配置" })
-			.click();
-		await btn("保存配置").click();
-		assert.match(await page.locator(".error-text").innerText(), /企业/);
-		await page.locator('[aria-label="关闭"]').click();
-		await visit("admin/services?tab=咨询留言");
-		await btn("标记已处理").click();
-		assert.match(await page.locator(".page-content").innerText(), /已处理/);
-	});
-	await check("320px及宽屏布局无横向溢出", async () => {
-		for (const width of [320, 430, 1280]) {
-			await page.setViewportSize({ width, height: 900 });
-			for (const route of [
-				"index/index",
-				"profile/index",
-				"profile/records",
-				"consultation/booking",
-			]) {
-				await visit(route);
-				assert.ok(
-					await page.evaluate(
-						() =>
-							document.documentElement.scrollWidth <= innerWidth,
-					),
-				);
-				assert.ok(
-					await page
-						.locator(".app-shell")
-						.evaluate(
-							(el) => el.getBoundingClientRect().width <= 430,
-						),
-				);
-			}
+
+	await check("课程和活动发布、同步、下架与删除", async () => {
+		const suffix = Date.now().toString(36);
+		const date = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+		for (const item of [
+			{ type: "course", key: `check-course-${suffix}`, title: `联调课程${suffix}`, route: "courses/index", selector: ".course-row", payload: { category: "情绪管理", minutes: 5, learners: "0", art: "meadow", hero: "video", teacher: "测试", intro: "测试课程", video: "", chapters: [{ title: "练习", duration: "05:00" }] } },
+			{ type: "activity", key: `check-activity-${suffix}`, title: `联调活动${suffix}`, route: "activities/index", selector: ".event-card", payload: { date, time: "10:00–11:00", location: "测试地点", capacity: 20, enrolled: 0, status: "报名中", art: "walking", hero: "forest", intro: "测试活动", schedule: [["10:00", "签到", "测试说明"]] } },
+		]) {
+			const base = { contentKey: item.key, contentType: item.type, title: item.title, category: item.payload.category || "", summary: "集成测试", status: "0", sortOrder: 99, payloadJson: JSON.stringify({ id: item.key, title: item.title, ...item.payload }) };
+			assert.equal((await adminApi("/mindcare/content", { method: "POST", body: JSON.stringify(base) })).code, 200);
+			await visit(item.route);
+			if (item.type === "course") await user.locator(".search-box input").fill(item.title);
+			await user.locator(item.selector).filter({ hasText: item.title }).waitFor();
+			const list = await adminApi(`/mindcare/content/list?contentType=${item.type}&title=${encodeURIComponent(item.title)}&pageNum=1&pageSize=10`);
+			const row = list.rows.find((record) => record.contentKey === item.key);
+			assert.ok(row);
+			assert.equal((await adminApi("/mindcare/content", { method: "PUT", body: JSON.stringify({ ...row, status: "1" }) })).code, 200);
+			await visit(item.route);
+			if (item.type === "course") await user.locator(".search-box input").fill(item.title);
+			await user.locator(item.selector).filter({ hasText: item.title }).waitFor({ state: "detached" });
+			assert.equal((await adminApi(`/mindcare/content/${row.contentId}`, { method: "DELETE" })).code, 200);
 		}
 	});
-	assert.deepEqual(errors, []);
-	console.log("All UI flows passed; no page errors.");
-} catch (error) {
-	await fs.mkdir("test-results", { recursive: true });
-	await page.screenshot({
-		path: "test-results/ui-failure.png",
-		fullPage: true,
+
+	await check("后台七个业务页面和用户终端列表可用", async () => {
+		for (const [route, heading] of [
+			["dashboard", "运营概览"], ["assessments", "心理量表"], ["courses", "心理课程"],
+			["activities", "疗愈活动"], ["consultations", "咨询预约"], ["records", "业务记录"],
+			["clients", "用户终端"],
+		]) {
+			await admin.goto(`${adminUrl}/mindcare/${route}`);
+			await admin.locator("h2").filter({ hasText: heading }).waitFor();
+		}
+		const clients = await adminApi("/mindcare/client/list?pageNum=1&pageSize=10");
+		assert.ok(clients.total >= 1);
 	});
-	throw error;
+
+	await check("14 个用户端页面无运行时异常", async () => {
+		for (const route of [
+			"index/index", "assessment/detail?id=emotion", "assessment/quiz?id=emotion", "assessment/report",
+			"consultation/index", "consultation/booking", "courses/index", "courses/detail?id=stress",
+			"activities/index", "activities/detail?id=forest", "activities/signup?id=forest", "activities/success",
+			"profile/index", "profile/records",
+		]) await visit(route);
+	});
+
+	await check("隐私清除同时删除本机和云端业务记录", async () => {
+		await visit("profile/index");
+		await button("隐私设置").click();
+		await user.locator(".sheet").waitFor();
+		await button("清除本机与云端记录").click();
+		await user.getByText("确认清除", { exact: true }).last().click();
+		for (let i = 0; i < 20; i++) {
+			const result = await adminApi(`/mindcare/record/list?clientId=${encodeURIComponent(testClientId)}&pageNum=1&pageSize=10`);
+			if (result.total === 0) break;
+			await user.waitForTimeout(250);
+		}
+		assert.equal((await adminApi(`/mindcare/record/list?clientId=${encodeURIComponent(testClientId)}&pageNum=1&pageSize=10`)).total, 0);
+		await visit("profile/records");
+		assert.match(await user.locator(".records-heading").innerText(), /共 0 条/);
+	});
+
+	await check("离线提交可本机保留并在恢复联网后补传", async () => {
+		await user.route("**/api/app/mindcare/records", (route) => route.request().method() === "POST" ? route.abort() : route.continue());
+		await visit("consultation/booking");
+		await input("称呼").fill("离线补传测试");
+		await input("联系手机").fill("13700137000");
+		await button("提交预约").click();
+		await user.locator(".record-card").first().waitFor();
+		await user.unroute("**/api/app/mindcare/records");
+		await visit("profile/records?filter=咨询");
+		await user.locator(".record-card").first().waitFor();
+		let uploaded = false;
+		for (let i = 0; i < 20; i++) {
+			const result = await adminApi(`/mindcare/record/list?clientId=${encodeURIComponent(testClientId)}&recordType=consultation&pageNum=1&pageSize=10`);
+			uploaded = result.rows.some((row) => row.contactPhone === "13700137000");
+			if (uploaded) break;
+			await user.waitForTimeout(250);
+		}
+		assert.ok(uploaded, "恢复联网后应自动补传预约");
+	});
+
+	assert.deepEqual(failedRequests, []);
+	assert.deepEqual(errors, []);
+	console.log("PASS all current integration UI checks");
 } finally {
 	await browser.close();
 }

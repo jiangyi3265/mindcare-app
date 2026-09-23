@@ -1,12 +1,12 @@
 <script>
-import { bootstrapMindcare, flushPendingRecords } from "./services/sync.js";
+import { bootstrapMindcare } from "./services/sync.js";
 
 export default {
 	onLaunch: function () {
 		bootstrapMindcare();
 	},
 	onShow: function () {
-		flushPendingRecords().catch(() => {});
+		bootstrapMindcare();
 	},
 };
 </script>

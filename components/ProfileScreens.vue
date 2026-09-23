@@ -238,7 +238,7 @@
 				><text class="muted block"
 					>测评、咨询、观看和报名记录会在联网时同步到平台。你可以随时清除本机与云端记录。</text
 				><button class="ui-reset button outline mt" @click="clearData">
-					清除本机记录
+					清除本机与云端记录
 				</button></template
 			>
 			<template v-if="booking"
@@ -311,7 +311,15 @@ const emptyAction = computed(
 watch(
 	() => props.params.filter,
 	(v) => {
-		filter.value = v || "全部";
+		let value = v || "全部";
+		for (let i = 0; i < 2; i++) {
+			try {
+				const decoded = decodeURIComponent(value);
+				if (decoded === value) break;
+				value = decoded;
+			} catch { break; }
+		}
+		filter.value = value;
 	},
 	{ immediate: true },
 );
@@ -436,7 +444,7 @@ function about() {
 }
 function clearData() {
 	uni.showModal({
-		title: "清除本机记录",
+		title: "清除本机与云端记录",
 		content: "将清除本机与平台上的测评、预约、观看和报名记录，此操作无法撤销。",
 		confirmText: "确认清除",
 		confirmColor: "#9a6f57",
@@ -451,7 +459,7 @@ function clearData() {
 				persist();
 				clearRemoteRecords();
 				close();
-				toast("本机记录已清除");
+				toast("记录清除请求已提交");
 			}
 		},
 	});

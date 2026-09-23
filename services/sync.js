@@ -5,6 +5,8 @@ const IDENTITY_KEY = "mindcare:identity:v1";
 const timers = new Map();
 let registrationPromise;
 let flushPromise;
+let bootstrapPromise;
+let mutationRevision = 0;
 
 function randomPart(length) {
 	if (globalThis.crypto?.getRandomValues) {
@@ -97,19 +99,25 @@ function applyBootstrap(data) {
 	persist();
 }
 
-export async function bootstrapMindcare({ silent = true } = {}) {
+export function bootstrapMindcare({ silent = true } = {}) {
+	if (bootstrapPromise) return bootstrapPromise;
+	bootstrapPromise = loadBootstrap(silent).finally(() => { bootstrapPromise = undefined; });
+	return bootstrapPromise;
+}
+
+async function loadBootstrap(silent) {
 	state.sync.status = "syncing";
 	try {
 		const identity = await ensureClient();
-		if (state.pendingClear) {
-			await clearRecords(identity);
-			state.pendingClear = false;
-			state.pendingSync = [];
+		while (true) {
+			await flushPendingRecords(identity);
+			const revision = mutationRevision;
+			const data = await fetchBootstrap(identity);
+			// A user action during the fetch must not be overwritten by an older snapshot.
+			if (revision !== mutationRevision || state.pendingClear || state.pendingSync.length) continue;
+			applyBootstrap(data || {});
+			return true;
 		}
-		await flushPendingRecords(identity);
-		const data = await fetchBootstrap(identity);
-		applyBootstrap(data || {});
-		return true;
 	} catch (error) {
 		state.sync.status = "offline";
 		state.sync.error = error.message;
@@ -140,6 +148,7 @@ export async function flushPendingRecords(existingIdentity) {
 }
 
 export function queueRecord(record, delay = 0) {
+	mutationRevision++;
 	const index = state.pendingSync.findIndex((item) => item.recordKey === record.recordKey);
 	if (index >= 0) state.pendingSync[index] = record;
 	else state.pendingSync.push(record);
@@ -192,12 +201,14 @@ export async function syncProfile() {
 }
 
 export function clearRemoteRecords() {
+	mutationRevision++;
 	state.pendingClear = true;
 	state.pendingSync = [];
 	persist();
-	ensureClient().then((identity) => clearRecords(identity)).then(() => {
-		state.pendingClear = false;
-		persist();
+	Promise.resolve().then(async () => {
+		// Wait for an already-running save before deleting the remote records.
+		if (flushPromise) await flushPromise.catch(() => {});
+		await flushPendingRecords();
 	}).catch((error) => {
 		state.sync.status = "offline";
 		state.sync.error = error.message;

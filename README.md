@@ -61,7 +61,7 @@ npm run build:mp-weixin
 
 ```text
 components/         页面级组件与通用应用外壳
-pages/              18 个 uni-app 路由页面
+pages/              14 个 uni-app 路由页面
 services/store.js   本机业务状态与离线持久化
 services/api.js     用户端 HTTP 接口封装
 services/sync.js    匿名身份、内容拉取与记录补传
@@ -78,10 +78,9 @@ design-reference/   设计参考素材
 
 ```bash
 npm test
-npm run test:ui
 ```
 
-UI 测试需要先启动 H5 开发服务器；截图与测试结果写入 `test-results/`，不会提交到 Git。
+`npm run test:ui` 是会创建、修改、删除测试业务记录的三端浏览器集成测试。请先用**独立测试数据库**启动后端、H5 开发服务（`5173`）和管理后台（`5180`），并设置 `MINDCARE_ISOLATED_TEST_DB=1` 与 `MINDCARE_TEST_ADMIN_PASSWORD` 后运行；不要指向生产数据库。测试输出打印在终端。
 
 ## 简历描述示例
 
@@ -91,4 +90,5 @@ UI 测试需要先启动 H5 开发服务器；截图与测试结果写入 `test-
 
 - 当前量表为演示题目与等权体验计分，正式上线前必须由专业人员提供授权题库、计分规则与结果说明。
 - 当前无支付功能；用户端使用按安装生成的匿名身份，不等同于实名账号或跨设备登录。
+- 示例课程尚未配置视频素材；须由运营后台在课程 JSON 中配置可访问的视频 URL，才能验证实际播放与观看进度。
 - 企业微信客服、微信小程序 AppID 与合法域名应由部署方在本地或平台后台配置，不应提交密钥。
