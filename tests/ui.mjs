@@ -32,12 +32,14 @@ for (const page of [user, admin]) {
 }
 const button = (name) => user.locator("uni-button").filter({ hasText: new RegExp(`^\\s*${name}\\s*$`) }).last();
 const input = (name) => user.locator(`uni-input[aria-label="${name}"] input`);
-const visit = async (route) => {
+const visit = async (route, { expectBootstrap = true } = {}) => {
 	await user.goto(`${appUrl}/#/pages/${route}`, { waitUntil: "domcontentloaded", timeout: 60000 });
-	const synced = user.waitForResponse((response) => response.url().includes("/app/mindcare/bootstrap") && response.status() === 200, { timeout: 30000 });
+	const synced = expectBootstrap
+		? user.waitForResponse((response) => response.url().includes("/app/mindcare/bootstrap") && response.status() === 200, { timeout: 30000 })
+		: null;
 	await user.reload({ waitUntil: "domcontentloaded", timeout: 60000 });
 	await user.locator(".app-shell").waitFor();
-	await synced;
+	if (synced) await synced;
 };
 const check = async (label, callback) => {
 	try {
@@ -168,10 +170,111 @@ try {
 		assert.match(await user.locator(".error-text").innerText(), /已报名/);
 	});
 
+	await check("多人同时报名不会超过活动容量", async () => {
+		const suffix = Date.now().toString(36);
+		const key = `capacity-check-${suffix}`;
+		const title = `并发容量测试${suffix}`;
+		const date = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+		const content = { contentKey: key, contentType: "activity", title, category: "测试", summary: "隔离库并发测试", status: "0", sortOrder: 99,
+			payloadJson: JSON.stringify({ id: key, title, date, time: "10:00–11:00", location: "测试地点", capacity: 1, enrolled: 0, status: "报名中", art: "walking", hero: "forest", intro: "测试活动", schedule: [["10:00", "签到", "测试说明"]] }) };
+		assert.equal((await adminApi("/mindcare/content", { method: "POST", body: JSON.stringify(content) })).code, 200);
+		const list = await adminApi(`/mindcare/content/list?contentType=activity&title=${encodeURIComponent(title)}&pageNum=1&pageSize=10`);
+		const row = list.rows.find((item) => item.contentKey === key);
+		assert.ok(row);
+		try {
+			const clients = Array.from({ length: 8 }, (_, index) => ({ clientId: `mc_capacity_${suffix}_${index}`, token: randomBytes(32).toString("hex") }));
+			for (const client of clients) {
+				assert.equal((await api("/app/mindcare/client/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(client) })).code, 200);
+			}
+			const submit = (client, index) => api("/app/mindcare/records", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "X-Client-Id": client.clientId, "X-Client-Token": client.token },
+				body: JSON.stringify({ recordKey: `capacity-${suffix}-${index}`, recordType: "activity", contentKey: key, contactName: "并发测试", contactPhone: "13800138000", status: "submitted", dataJson: JSON.stringify({ count: 1, emergency: "家人 13800138000" }) }),
+			});
+			const results = await Promise.all(clients.map(submit));
+			const accepted = results.filter((result) => result.code === 200).length;
+			assert.equal(accepted, 1, `capacity 1 accepted ${accepted} concurrent signups: ${JSON.stringify(results.map((result) => result.msg))}`);
+			const winner = results.findIndex((result) => result.code === 200);
+			assert.equal((await submit(clients[winner], winner)).code, 200, "retrying an accepted signup should stay idempotent");
+			const records = await adminApi(`/mindcare/record/list?recordType=activity&title=${encodeURIComponent(title)}&pageNum=1&pageSize=20`);
+			assert.equal(records.rows.filter((item) => item.contentKey === key).length, 1);
+		} finally {
+			assert.equal((await adminApi(`/mindcare/content/${row.contentId}`, { method: "DELETE" })).code, 200);
+		}
+	});
+
 	await check("课程空视频有明确提示", async () => {
 		await visit("courses/detail?id=stress");
 		await button("继续观看").or(button("开始观看")).click();
 		assert.match(await user.locator(".notice").innerText(), /正在准备/);
+	});
+
+	await check("真实视频播放与课程进度同步", async () => {
+		const key = `video-check-${Date.now().toString(36)}`;
+		const mediaKey = `video-${key}`;
+		const mediaSize = await user.evaluate(async (name) => {
+			const canvas = document.createElement("canvas");
+			canvas.width = 160;
+			canvas.height = 90;
+			const context = canvas.getContext("2d");
+			const stream = canvas.captureStream(12);
+			const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp8") ? "video/webm;codecs=vp8" : "video/webm";
+			const recorder = new MediaRecorder(stream, { mimeType });
+			const chunks = [];
+			recorder.ondataavailable = (event) => chunks.push(event.data);
+			const stopped = new Promise((resolve) => { recorder.onstop = resolve; });
+			recorder.start(200);
+			for (let i = 0; i < 25; i++) {
+				context.fillStyle = i % 2 ? "#567466" : "#bdcdbb";
+				context.fillRect(0, 0, 160, 90);
+				await new Promise((resolve) => setTimeout(resolve, 100));
+			}
+			recorder.stop();
+			await stopped;
+			stream.getTracks().forEach((track) => track.stop());
+			const blob = new Blob(chunks, { type: "video/webm" });
+			const db = await new Promise((resolve, reject) => {
+				const request = indexedDB.open("mindcare-media", 1);
+				request.onupgradeneeded = () => request.result.createObjectStore("media");
+				request.onsuccess = () => resolve(request.result);
+				request.onerror = () => reject(request.error);
+			});
+			await new Promise((resolve, reject) => {
+				const transaction = db.transaction("media", "readwrite");
+				transaction.objectStore("media").put(blob, name);
+				transaction.oncomplete = resolve;
+				transaction.onerror = () => reject(transaction.error);
+			});
+			db.close();
+			return blob.size;
+		}, mediaKey);
+		assert.ok(mediaSize > 1000, "测试视频应包含真实媒体字节");
+		const title = `播放测试${key}`;
+		const payload = { id: key, title, category: "情绪管理", minutes: 1, learners: "0", art: "meadow", hero: "video", teacher: "测试", intro: "播放验证", video: "", mediaKey, chapters: [{ title: "完整课程", duration: "00:03" }] };
+		const created = await adminApi("/mindcare/content", { method: "POST", body: JSON.stringify({ contentKey: key, contentType: "course", title, category: payload.category, summary: payload.intro, payloadJson: JSON.stringify(payload), status: "0", sortOrder: 99 }) });
+		assert.equal(created.code, 200);
+		const list = await adminApi(`/mindcare/content/list?contentType=course&title=${encodeURIComponent(title)}&pageNum=1&pageSize=10`);
+		const row = list.rows.find((item) => item.contentKey === key);
+		assert.ok(row);
+		try {
+			await visit(`courses/detail?id=${key}`);
+			await button("开始观看").click();
+			await user.locator("video").waitFor();
+			await user.waitForFunction(() => document.querySelector("video")?.readyState >= 2, undefined, { timeout: 15000 });
+			await user.waitForFunction(() => document.querySelector("video")?.currentTime > 0.3, undefined, { timeout: 15000 });
+			await visit("profile/records?filter=课程");
+			let syncedProgress;
+			for (let i = 0; i < 20; i++) {
+				const records = await adminApi(`/mindcare/record/list?recordType=course&title=${encodeURIComponent(title)}&pageNum=1&pageSize=10`);
+				syncedProgress = records.rows.find((item) => item.contentKey === key);
+				if (syncedProgress) break;
+				await user.waitForTimeout(250);
+			}
+			assert.ok(syncedProgress, "播放进度应同步至后台");
+			assert.ok(Number(syncedProgress.progress) > 0);
+		} finally {
+			assert.equal((await adminApi(`/mindcare/content/${row.contentId}`, { method: "DELETE" })).code, 200);
+		}
 	});
 
 	await check("后台发布内容后用户可见，下架后用户不可见", async () => {
@@ -260,6 +363,17 @@ try {
 		]) await visit(route);
 	});
 
+	await check("窄屏、常规手机与宽屏无横向溢出", async () => {
+		for (const width of [320, 430, 1280]) {
+			await user.setViewportSize({ width, height: 900 });
+			for (const route of ["index/index", "consultation/booking", "activities/signup?id=forest", "profile/index", "profile/records"]) {
+				await visit(route);
+				assert.ok(await user.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${route} overflows at ${width}px`);
+			}
+		}
+		await user.setViewportSize({ width: 390, height: 844 });
+	});
+
 	await check("隐私清除同时删除本机和云端业务记录", async () => {
 		await visit("profile/index");
 		await button("隐私设置").click();
@@ -284,7 +398,7 @@ try {
 		await button("提交预约").click();
 		await user.locator(".record-card").first().waitFor();
 		await user.unroute("**/api/app/mindcare/records");
-		await visit("profile/records?filter=咨询");
+		await visit("profile/records?filter=咨询", { expectBootstrap: false });
 		await user.locator(".record-card").first().waitFor();
 		let uploaded = false;
 		for (let i = 0; i < 20; i++) {
