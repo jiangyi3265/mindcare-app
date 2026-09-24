@@ -14,7 +14,7 @@
 			<view v-if="recoveryCode" class="recovery-result">
 				<text class="auth-label block">你的新恢复码</text>
 				<text class="recovery-value" selectable>{{ recoveryCode }}</text>
-				<text class="small muted block">请截图或保存在密码管理器中。不要发送给他人，也不要把它当作短信验证码。</text>
+				<text class="small muted block">请截图或保存在密码管理器中，切勿转发他人。</text>
 				<button class="ui-reset button outline mt" @click="copyCode">复制恢复码</button>
 				<button class="ui-reset acknowledgement mt" :aria-pressed="acknowledged" @click="acknowledged = !acknowledged">
 					<text class="check-box" :class="{ checked: acknowledged }">{{ acknowledged ? "✓" : "" }}</text>
@@ -54,10 +54,6 @@
 					<button class="ui-reset button submit-button" :disabled="busy" @click="submit">{{ busy ? "请稍候…" : heading }}</button>
 					<button v-if="mode === 'login'" class="ui-reset auth-link" @click="switchMode('recover')">忘记密码？使用恢复码找回</button>
 					<button v-else-if="mode === 'recover'" class="ui-reset auth-link" @click="switchMode('login')">返回登录</button>
-				</view>
-				<view class="auth-note">
-					<UiIcon name="shield-check" :size="30" tone="primary" />
-					<text>暂未接入短信。手机号仅作登录标识，无法证明号码归属；忘记密码时必须提供恢复码。</text>
 				</view>
 			</template>
 		</view>
@@ -145,8 +141,6 @@ function copyCode() {
 .auth-field .input { width: 100%; min-height: 88rpx; font-size: 27rpx; }
 .submit-button { margin-top: 34rpx; }
 .auth-link { display: block; margin: 20rpx auto 0; min-height: 60rpx; padding: 12rpx; color: var(--primary-dark); font-size: 24rpx; }
-.auth-note { display: flex; align-items: flex-start; gap: 12rpx; margin-top: 46rpx; padding-top: 24rpx; border-top: 1px solid var(--line); color: var(--muted-strong); font-size: 23rpx; line-height: 1.7; }
-.auth-note text { flex: 1; }
 .recovery-result { padding: 27rpx; border-radius: 22rpx; background: var(--pale); }
 .recovery-value { display: block; margin: 18rpx 0; padding: 22rpx 12rpx; background: #fafbf8; border: 1px solid var(--line); border-radius: 14rpx; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 25rpx; line-height: 1.6; text-align: center; overflow-wrap: anywhere; user-select: all; }
 .acknowledgement { display: flex; align-items: center; gap: 12rpx; min-height: 64rpx; font-size: 24rpx; text-align: left; }
