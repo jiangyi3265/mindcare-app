@@ -41,15 +41,49 @@ export const registerClient = (identity, profile) =>
 export const fetchBootstrap = (identity) =>
 	request("/app/mindcare/bootstrap", { headers: identityHeaders(identity) });
 
-export const saveRecord = (identity, record) =>
+export const saveRecord = (identity, record, accountId) =>
 	request("/app/mindcare/records", {
 		method: "POST",
-		headers: identityHeaders(identity),
+		headers: { ...identityHeaders(identity), ...(accountId ? { "X-Expected-Account-Id": String(accountId) } : {}) },
 		data: record,
 	});
 
-export const clearRecords = (identity) =>
+export const clearRecords = (identity, accountId) =>
 	request("/app/mindcare/records", {
 		method: "DELETE",
+		headers: { ...identityHeaders(identity), ...(accountId ? { "X-Expected-Account-Id": String(accountId) } : {}) },
+	});
+
+export const createAccount = (identity, details) =>
+	request("/app/mindcare/account/register", {
+		method: "POST",
 		headers: identityHeaders(identity),
+		data: details,
+	});
+
+export const loginAccount = (identity, details) =>
+	request("/app/mindcare/account/login", {
+		method: "POST",
+		headers: identityHeaders(identity),
+		data: details,
+	});
+
+export const recoverAccount = (identity, details) =>
+	request("/app/mindcare/account/recover", {
+		method: "POST",
+		headers: identityHeaders(identity),
+		data: details,
+	});
+
+export const logoutAccount = (identity) =>
+	request("/app/mindcare/account/logout", {
+		method: "POST",
+		headers: identityHeaders(identity),
+	});
+
+export const updateAccountProfile = (identity, nickname) =>
+	request("/app/mindcare/account/profile", {
+		method: "PUT",
+		headers: identityHeaders(identity),
+		data: { nickname },
 	});

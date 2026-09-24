@@ -13,6 +13,7 @@ export const routes = {
 	success: "activities/success",
 	profile: "profile/index",
 	records: "profile/records",
+	account: "account/index",
 };
 export function go(name, query = {}, root = false) {
 	const params = Object.entries(query)

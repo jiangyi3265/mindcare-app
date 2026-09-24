@@ -73,6 +73,12 @@
 			}
 		},
 		{
+			"path": "pages/account/index",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		},
+		{
 			"path": "pages/profile/index",
 			"style": {
 				"navigationStyle": "custom"

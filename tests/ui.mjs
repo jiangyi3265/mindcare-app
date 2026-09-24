@@ -341,32 +341,33 @@ try {
 		}
 	});
 
-	await check("后台七个业务页面和用户终端列表可用", async () => {
+	await check("后台七个业务页面和账号终端列表可用", async () => {
 		for (const [route, heading] of [
 			["dashboard", "运营概览"], ["assessments", "心理量表"], ["courses", "心理课程"],
 			["activities", "疗愈活动"], ["consultations", "咨询预约"], ["records", "业务记录"],
-			["clients", "用户终端"],
+			["clients", "用户账户与终端"],
 		]) {
 			await admin.goto(`${adminUrl}/mindcare/${route}`);
 			await admin.locator("h2").filter({ hasText: heading }).waitFor();
 		}
 		const clients = await adminApi("/mindcare/client/list?pageNum=1&pageSize=10");
 		assert.ok(clients.total >= 1);
+		assert.equal((await adminApi("/mindcare/account/list?pageNum=1&pageSize=10")).code, 200);
 	});
 
-	await check("14 个用户端页面无运行时异常", async () => {
+	await check("15 个用户端页面无运行时异常", async () => {
 		for (const route of [
 			"index/index", "assessment/detail?id=emotion", "assessment/quiz?id=emotion", "assessment/report",
 			"consultation/index", "consultation/booking", "courses/index", "courses/detail?id=stress",
 			"activities/index", "activities/detail?id=forest", "activities/signup?id=forest", "activities/success",
-			"profile/index", "profile/records",
+			"profile/index", "profile/records", "account/index",
 		]) await visit(route);
 	});
 
 	await check("窄屏、常规手机与宽屏无横向溢出", async () => {
 		for (const width of [320, 430, 1280]) {
 			await user.setViewportSize({ width, height: 900 });
-			for (const route of ["index/index", "consultation/booking", "activities/signup?id=forest", "profile/index", "profile/records"]) {
+			for (const route of ["index/index", "consultation/booking", "activities/signup?id=forest", "profile/index", "profile/records", "account/index"]) {
 				await visit(route);
 				assert.ok(await user.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${route} overflows at ${width}px`);
 			}

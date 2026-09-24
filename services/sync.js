@@ -1,5 +1,8 @@
-import { clearRecords, fetchBootstrap, registerClient, saveRecord } from "./api.js";
-import { now, persist, state } from "./store.js";
+import {
+	clearRecords, createAccount, fetchBootstrap, loginAccount, logoutAccount,
+	recoverAccount, registerClient, saveRecord, updateAccountProfile,
+} from "./api.js";
+import { clearPersonalData, now, persist, state } from "./store.js";
 
 const IDENTITY_KEY = "mindcare:identity:v1";
 const timers = new Map();
@@ -88,6 +91,14 @@ function applyRecords(records = []) {
 }
 
 function applyBootstrap(data) {
+	if (state.account?.accountId && state.account.accountId !== data.account?.accountId) {
+		clearPersonalData();
+	}
+	state.account = data.account || null;
+	if (state.account) {
+		state.profile.name = state.account.nickname || "心友";
+		state.profile.phone = state.account.phone;
+	}
 	state.serverScales = Array.isArray(data.assessments) ? data.assessments : [];
 	state.serverCourses = Array.isArray(data.courses) ? data.courses : [];
 	state.serverActivities = Array.isArray(data.activities) ? data.activities : [];
@@ -132,14 +143,14 @@ export async function flushPendingRecords(existingIdentity) {
 	flushPromise = (async () => {
 		const identity = existingIdentity || await ensureClient();
 		if (state.pendingClear) {
-			await clearRecords(identity);
+			await clearRecords(identity, state.account?.accountId);
 			state.pendingClear = false;
 			state.pendingSync = [];
 			persist();
 		}
 		while (state.pendingSync.length) {
 			const pending = state.pendingSync[0];
-			await saveRecord(identity, pending);
+			await saveRecord(identity, pending, state.account?.accountId);
 			state.pendingSync.shift();
 			persist();
 		}
@@ -189,15 +200,70 @@ export function recordPayload(type, localRecord, overrides = {}) {
 
 export async function syncProfile() {
 	try {
-		await ensureClient();
+		const identity = await ensureClient();
+		if (state.account) {
+			state.account = await updateAccountProfile(identity, state.profile.name);
+		}
 		state.sync.status = "online";
 		state.sync.lastSyncedAt = now();
 		persist();
+		return true;
 	} catch (error) {
 		state.sync.status = "offline";
 		state.sync.error = error.message;
 		persist();
+		return false;
 	}
+}
+
+async function prepareAccountAction() {
+	if (bootstrapPromise) await bootstrapPromise;
+	const identity = await ensureClient();
+	await flushPendingRecords(identity);
+	return identity;
+}
+
+function acceptAccount(result) {
+	state.account = {
+		accountId: result.accountId,
+		phone: result.phone,
+		nickname: result.nickname,
+	};
+	state.profile.name = result.nickname || "心友";
+	state.profile.phone = result.phone;
+	persist();
+}
+
+export async function registerWithPassword(details) {
+	const identity = await prepareAccountAction();
+	const result = await createAccount(identity, details);
+	acceptAccount(result);
+	await bootstrapMindcare({ silent: false });
+	return result;
+}
+
+export async function loginWithPassword(details) {
+	const identity = await prepareAccountAction();
+	const result = await loginAccount(identity, details);
+	acceptAccount(result);
+	await bootstrapMindcare({ silent: false });
+	return result;
+}
+
+export async function recoverWithCode(details) {
+	const identity = await prepareAccountAction();
+	const result = await recoverAccount(identity, details);
+	acceptAccount(result);
+	await bootstrapMindcare({ silent: false });
+	return result;
+}
+
+export async function signOutAccount() {
+	const identity = await prepareAccountAction();
+	await logoutAccount(identity);
+	uni.removeStorageSync(IDENTITY_KEY);
+	clearPersonalData();
+	await bootstrapMindcare();
 }
 
 export function clearRemoteRecords() {

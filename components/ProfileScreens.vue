@@ -14,14 +14,19 @@
 				><view class="avatar"
 					><Artwork name="avatar" :aspect="1" /></view
 				><view class="profile-copy grow"
-					><text class="title block">{{ state.profile.name }}</text
+					><text class="title block">{{ state.account ? state.profile.name : "访客" }}</text
 					><text class="small muted block mt-xs"
-						>愿你每天，都更了解自己</text
+						>{{ state.account ? maskedPhone + " · 记录已关联账号" : "登录后，记录可在其他设备找回" }}</text
 					></view
 				></view
 			></view
 		>
 		<view class="pad"
+			><view v-if="!state.account" class="auth-prompt">
+				<text class="body-title block">让记录跟随你的账号</text>
+				<text class="small muted block mt-xs">手机号登录后，测评、预约和活动记录会归属同一账号。</text>
+				<button class="ui-reset button mt-sm" @click="go('account', { mode: 'login' })">登录或注册</button>
+			</view
 			><view class="stats card"
 				><button
 					class="ui-reset"
@@ -225,6 +230,14 @@
 					<UiIcon name="gear-six" /><text class="grow"
 						>管理工作台</text
 					><UiIcon name="caret-right" :size="28" /></button
+				><button
+					v-if="state.account"
+					class="ui-reset list-row"
+					:disabled="loggingOut"
+					@click="confirmLogout"
+				>
+					<UiIcon name="sign-out" /><text class="grow">{{ loggingOut ? "正在退出…" : "退出登录" }}</text>
+					<UiIcon name="caret-right" :size="28" /></button
 			></template>
 			<template v-if="privacy"
 				><view class="sheet-heading"
@@ -284,6 +297,7 @@ import {
 	clearRemoteRecords,
 	queueRecord,
 	recordPayload,
+	signOutAccount,
 	syncProfile,
 } from "../services/sync.js";
 const props = defineProps({
@@ -295,7 +309,10 @@ const filter = ref("全部"),
 	settings = ref(false),
 	privacy = ref(false),
 	booking = ref(null),
+	loggingOut = ref(false),
 	nickname = ref(state.profile.name);
+const maskedPhone = computed(() => state.account?.phone
+	? `${state.account.phone.slice(0, 3)}****${state.account.phone.slice(-4)}` : "");
 useSheet(
 	computed(() => !!(settings.value || privacy.value || booking.value)),
 	close,
@@ -428,13 +445,39 @@ function close() {
 	privacy.value = false;
 	booking.value = null;
 }
-function saveName() {
+async function saveName() {
 	if (!nickname.value.trim()) return toast("请填写昵称");
+	const previous = state.profile.name;
 	state.profile.name = nickname.value.trim();
 	persist();
-	syncProfile();
+	const saved = await syncProfile();
+	if (!saved && state.account) {
+		state.profile.name = previous;
+		persist();
+		return toast("保存失败，请联网重试");
+	}
 	close();
 	toast("昵称已保存");
+}
+function confirmLogout() {
+	uni.showModal({
+		title: "退出登录",
+		content: "退出后，此设备不再显示账号记录；重新登录仍可找回。",
+		confirmColor: "#657c70",
+		success: async (result) => {
+			if (!result.confirm || loggingOut.value) return;
+			loggingOut.value = true;
+			try {
+				await signOutAccount();
+				close();
+				toast("已退出登录");
+			} catch (error) {
+				toast(error.message || "退出失败，请联网重试");
+			} finally {
+				loggingOut.value = false;
+			}
+		},
+	});
 }
 function about() {
 	explain(
@@ -486,6 +529,8 @@ function cancelBooking() {
 }
 </script>
 <style scoped>
+.auth-prompt { margin: 8rpx 0 25rpx; padding: 26rpx; border-radius: 22rpx; background: var(--pale); }
+.auth-prompt .button { max-width: 300rpx; margin-left: 0; }
 .profile-top {
 	position: relative;
 	padding: 30rpx 36rpx 38rpx;

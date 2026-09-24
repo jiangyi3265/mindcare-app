@@ -10,7 +10,9 @@
 		"postbuild:mp-weixin": "node scripts/check-mp-size.mjs",
 		"check:mp-weixin": "node scripts/check-mp-size.mjs",
 		"test": "node --test tests/domain.test.mjs",
-		"test:ui": "node tests/ui.mjs"
+		"test:ui": "node tests/ui.mjs",
+		"test:account:api": "node tests/account.integration.mjs",
+		"test:account:browser": "node tests/account.browser.mjs"
 	},
 	"dependencies": {
 		"@dcloudio/uni-app": "3.0.0-5020420260813003",

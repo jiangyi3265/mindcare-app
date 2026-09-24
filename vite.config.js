@@ -8,7 +8,7 @@ export default defineConfig({
 		strictPort: true,
 		proxy: {
 			"/api": {
-				target: "http://localhost:8080",
+				target: process.env.MINDCARE_DEV_API_TARGET || "http://localhost:8080",
 				changeOrigin: true,
 				rewrite: (path) => path.replace(/^\/api/, ""),
 			},

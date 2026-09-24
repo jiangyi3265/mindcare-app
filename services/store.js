@@ -3,6 +3,7 @@ import { scales, courses, activities } from "../data/catalog.js";
 const KEY = "mindcare:state:v1";
 const seed = {
 	profile: { name: "小林", phone: "" },
+	account: null,
 	reports: [
 		{
 			id: "sample-report",
@@ -112,5 +113,19 @@ export function resetData() {
 	uni.removeStorageSync(KEY);
 	Object.keys(state).forEach((k) => delete state[k]);
 	Object.assign(state, JSON.parse(JSON.stringify(seed)));
+	persist();
+}
+
+export function clearPersonalData() {
+	state.account = null;
+	state.profile = { name: "小林", phone: "" };
+	state.reports = [];
+	state.bookings = [];
+	state.progress = {};
+	state.enrollments = [];
+	state.messages = [];
+	state.drafts = {};
+	state.pendingSync = [];
+	state.pendingClear = false;
 	persist();
 }
