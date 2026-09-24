@@ -8,10 +8,12 @@
 			>
 				<UiIcon name="bell" /></button
 		></template>
-		<Artwork
-			name="hero"
-			alt="给心情，一点被看见的时间。从一次测评开始，了解自己"
-		/>
+		<swiper v-if="banners.length" class="home-banner" :autoplay="banners.length > 1" :interval="4500" :duration="450" :circular="banners.length > 1" :indicator-dots="banners.length > 1" indicator-color="rgba(54,76,68,.35)" indicator-active-color="#597568" aria-label="首页轮播图">
+			<swiper-item v-for="banner in banners" :key="banner.id">
+				<Artwork v-if="banner.image.startsWith('builtin:')" :name="banner.image.slice(8)" :alt="banner.title" :aspect="2.106" />
+				<image v-else class="banner-image" :src="bannerImageUrl(banner.image)" :alt="banner.title" mode="aspectFill" />
+			</swiper-item>
+		</swiper>
 		<view class="pad home-main">
 			<view class="search-box"
 				><UiIcon
@@ -304,7 +306,7 @@
 </template>
 <script setup>
 import { computed, ref, watch } from "vue";
-import { state, allScales, persist, id, now } from "../services/store.js";
+import { state, allScales, allBanners, persist, id, now } from "../services/store.js";
 import { options } from "../data/catalog.js";
 import { calculateScore } from "../services/domain.js";
 import { go, toast } from "../services/navigation.js";
@@ -314,6 +316,9 @@ const props = defineProps({
 	params: { type: Object, default: () => ({}) },
 });
 const categories = ["全部", "情绪", "睡眠", "压力", "人际"];
+const banners = computed(() => allBanners().filter((item) => item?.id && typeof item.image === 'string' && /^(builtin:(hero|rest)|\/profile\/upload\/[A-Za-z0-9/_-]+\.(png|jpe?g|webp))$/.test(item.image)));
+const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8080").replace(/\/$/, "");
+const bannerImageUrl = (path) => `${apiBase}${path}`;
 const category = ref("全部"),
 	search = ref(""),
 	showAll = ref(false),
@@ -440,6 +445,14 @@ function saveReport() {
 }
 </script>
 <style scoped>
+.home-banner {
+	width: 100%;
+	height: 47.48vw;
+	max-height: 204px;
+	background: #f4f7f1;
+}
+.home-banner swiper-item { overflow: hidden; }
+.banner-image { display: block; width: 100%; height: 100%; }
 .home-main {
 	margin-top: -12rpx;
 	position: relative;

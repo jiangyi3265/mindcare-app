@@ -102,6 +102,8 @@ function applyBootstrap(data) {
 	state.serverScales = Array.isArray(data.assessments) ? data.assessments : [];
 	state.serverCourses = Array.isArray(data.courses) ? data.courses : [];
 	state.serverActivities = Array.isArray(data.activities) ? data.activities : [];
+	state.serverBanners = Array.isArray(data.banners) ? data.banners : [];
+	state.serverBannersLoaded = true;
 	state.serverContentLoaded = true;
 	applyRecords(data.records);
 	state.sync.status = "online";

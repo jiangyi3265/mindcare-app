@@ -66,6 +66,8 @@ const seed = {
 	serverScales: [],
 	serverCourses: [],
 	serverActivities: [],
+	serverBanners: [],
+	serverBannersLoaded: false,
 	serverContentLoaded: false,
 	pendingSync: [],
 	pendingClear: false,
@@ -109,6 +111,10 @@ export const allCourses = () =>
 	state.serverContentLoaded ? state.serverCourses : merged(courses, state.customCourses);
 export const allActivities = () =>
 	state.serverContentLoaded ? state.serverActivities : merged(activities, state.customActivities);
+export const allBanners = () => state.serverBannersLoaded ? state.serverBanners : [
+	{ id: 'home-welcome', title: '给心情，一点被看见的时间', image: 'builtin:hero' },
+	{ id: 'home-rest', title: '慢下来，听见自己', image: 'builtin:rest' },
+];
 export function resetData() {
 	uni.removeStorageSync(KEY);
 	Object.keys(state).forEach((k) => delete state[k]);
