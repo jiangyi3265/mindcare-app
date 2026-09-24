@@ -10,27 +10,7 @@
 		></template>
 		<Artwork name="counseling" alt="有人倾听，也是一种力量" />
 		<view class="pad consultation-body">
-			<view class="card support-card"
-				><view class="wechat-icon"
-					><UiIcon
-						name="wechat-logo"
-						tone="primary"
-						:size="82" /></view
-				><view class="grow"
-					><text class="body-title block">微信官方客服</text
-					><text class="tiny muted block"
-						>在线沟通 · 咨询服务与预约帮助</text
-					><button
-						class="ui-reset button compact mt-xs"
-						@click="contactCustomer"
-					>
-						联系客服</button
-					><text class="tiny muted block center mt-xs"
-						>将打开微信客服会话</text
-					></view
-				></view
-			>
-			<view class="card booking-card mt-sm"
+			<view class="card booking-card"
 				><view class="booking-art"><Artwork name="chair" /></view
 				><view class="grow"
 					><text class="body-title">预约咨询</text
@@ -191,7 +171,6 @@ import { ref, reactive, watch } from "vue";
 import { state, persist, id, now } from "../services/store.js";
 import { validateContact } from "../services/domain.js";
 import { go, explain } from "../services/navigation.js";
-import { contactCustomer } from "../services/customer.js";
 import { queueRecord, recordPayload } from "../services/sync.js";
 defineProps({ mode: String, params: Object });
 const expanded = ref(-1),
@@ -201,7 +180,7 @@ const faqs = [
 	{
 		title: "如何选择适合自己的咨询方式？",
 		content:
-			"你可以选择视频、电话或线下咨询。若不确定，先联系客服沟通你的需求。",
+			"你可以选择视频、电话或线下咨询。若不确定，可在预约时留言说明需求。",
 	},
 	{
 		title: "咨询需要准备什么？",
@@ -290,21 +269,6 @@ function submit() {
 .consultation-body {
 	margin-top: -23rpx;
 	position: relative;
-}
-.support-card {
-	display: flex;
-	gap: 18rpx;
-	padding: 22rpx;
-}
-.wechat-icon {
-	width: 128rpx;
-	height: 128rpx;
-	background: #e9f0e7;
-	border-radius: 50%;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	flex-shrink: 0;
 }
 .booking-card {
 	padding: 21rpx;

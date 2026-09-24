@@ -12,6 +12,7 @@
 		"test": "node --test tests/domain.test.mjs",
 		"test:ui": "node tests/ui.mjs",
 		"test:banner:browser": "node tests/banner.browser.mjs",
+		"test:consultation:browser": "node tests/consultation.smoke.mjs",
 		"test:account:api": "node tests/account.integration.mjs",
 		"test:account:browser": "node tests/account.browser.mjs"
 	},

@@ -88,6 +88,8 @@ npm test
 
 `npm run test:banner:browser` 在独立测试库中验证后台图片上传、排序、发布/下架以及用户端自动轮播。默认 H5 端口为 `5173`，如被占用可通过 `MINDCARE_APP_URL` 指向其他本地端口。
 
+`npm run test:consultation:browser` 检查咨询首页、预约入口及手机/宽屏布局；可通过 `MINDCARE_APP_URL` 指向待检查的 H5 地址。
+
 ## 简历描述示例
 
 参与 MindCare 心理健康用户端开发，基于 Vue 3 与 uni-app 实现心理测评、咨询预约、课程学习、公益活动和个人记录等页面，完成手机号账号、跨设备记录归属、离线队列及与 Spring Boot 后端和 Vue 管理端的数据互通。
