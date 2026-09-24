@@ -20,7 +20,8 @@ export function go(name, query = {}, root = false) {
 		.map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
 		.join("&");
 	const url = `/pages/${routes[name] || name}${params ? "?" + params : ""}`;
-	uni[root ? "reLaunch" : "navigateTo"]({ url });
+	if (root) uni.reLaunch({ url });
+	else uni.navigateTo({ url });
 }
 export function goBack() {
 	if (getCurrentPages().length > 1) uni.navigateBack();
