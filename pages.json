@@ -31,6 +31,12 @@
 			}
 		},
 		{
+			"path": "pages/consultation/expert",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		},
+		{
 			"path": "pages/consultation/booking",
 			"style": {
 				"navigationStyle": "custom"

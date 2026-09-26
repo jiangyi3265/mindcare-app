@@ -26,11 +26,12 @@
 			>
 			<SectionHeading title="咨询专家" action="预约" @action="go('booking')" />
 			<view class="expert-list">
-				<view v-for="expert in experts" :key="expert.id" class="card expert-card">
+				<button v-for="expert in experts" :key="expert.id" class="ui-reset card expert-card" type="button" :aria-label="`查看${expert.name || expert.title}的可预约时间`" @click="go('expert', { id: expert.id })">
 					<Artwork v-if="expert.photo === 'builtin:avatar'" name="avatar" :alt="expert.name || expert.title" :aspect="1" />
 					<image v-else :src="expertImageUrl(expert.photo)" class="expert-photo" mode="aspectFill" :alt="expert.name || expert.title" />
 					<view class="expert-copy"><text class="body-title block">{{ expert.name || expert.title }}</text><text class="tiny muted block mt-xs">{{ expert.credentials }}</text><text class="small muted block mt-xs">{{ expert.profile }}</text><view class="expert-tags"><text v-for="method in (expert.methods || []).slice(0, 3)" :key="method" class="badge neutral">{{ method }}</text></view></view>
-				</view>
+					<UiIcon name="caret-right" :size="25" />
+				</button>
 			</view>
 			<SectionHeading title="服务流程" />
 			<view class="steps"
@@ -64,8 +65,25 @@
 			>
 		</view>
 	</AppShell>
+	<AppShell v-else-if="mode === 'expert'" title="专家详情" back>
+		<view v-if="selectedExpert" class="pad expert-detail">
+			<view class="card expert-profile-card">
+				<Artwork v-if="selectedExpert.photo === 'builtin:avatar'" name="avatar" :alt="selectedExpert.name || selectedExpert.title" :aspect="1" />
+				<image v-else :src="expertImageUrl(selectedExpert.photo)" class="expert-detail-photo" mode="aspectFill" :alt="selectedExpert.name || selectedExpert.title" />
+				<view class="expert-detail-copy"><text class="title block">{{ selectedExpert.name || selectedExpert.title }}</text><text class="small muted block mt-xs">{{ selectedExpert.credentials }}</text><text class="body block mt-sm">{{ selectedExpert.profile }}</text><view class="expert-tags"><text v-for="method in (selectedExpert.methods || []).slice(0, 6)" :key="method" class="badge neutral">{{ method }}</text></view></view>
+			</view>
+			<SectionHeading title="可预约时间" icon="calendar-check" />
+			<text class="small muted block availability-note">已开放未来两个月的预约，选择日期和时段后即可提交预约。</text>
+			<view class="availability-preview">
+				<view v-for="day in previewDates" :key="day.value" class="availability-day"><view class="between"><text class="body-title">{{ day.label }}</text><text class="tiny muted">{{ day.week }}</text></view><view class="availability-times"><button v-for="time in timesFor(selectedExpert)" :key="time" class="ui-reset slot-button" type="button" @click="bookSlot(day.value, time)">{{ time }}</button></view></view>
+			</view>
+			<button class="ui-reset button" type="button" @click="go('booking', { expert: selectedExpert.id })">查看全部两个月并预约</button>
+		</view>
+	</AppShell>
 	<AppShell v-else title="预约咨询" back>
 		<view class="pad booking-form">
+			<SectionHeading title="选择专家" /><scroll-view scroll-x class="expert-picker-scroll"><view class="expert-picker"><button v-for="expert in experts" :key="expert.id" class="ui-reset expert-option" type="button" :class="{ selected: form.expertId === expert.id }" @click="form.expertId = expert.id"><text class="body-title block">{{ expert.name || expert.title }}</text><text class="tiny muted block mt-xs">{{ expert.credentials }}</text></button></view></scroll-view>
+			<text class="tiny muted block availability-note">可预约日期：{{ bookingRangeLabel }}，左右滑动查看更多日期。</text>
 			<SectionHeading title="咨询方式" /><view class="methods"
 				><button
 					v-for="method in methods"
@@ -81,7 +99,8 @@
 					/><text>{{ method.label }}</text>
 				</button></view
 			>
-			<SectionHeading title="选择日期" /><view class="dates"
+			<SectionHeading title="选择日期" /><scroll-view scroll-x class="dates-scroll"
+				><view class="dates"
 				><button
 					v-for="day in dates"
 					:key="day.value"
@@ -91,12 +110,12 @@
 				>
 					<text>{{ day.label }}</text
 					><text class="tiny">{{ day.week }}</text>
-				</button></view
+				</button></view></scroll-view
 			>
 			<SectionHeading title="选择时间" /><view class="times"
 				><button
 					class="ui-reset"
-					v-for="time in ['10:00', '14:00', '16:00']"
+					v-for="time in activeTimes"
 					:key="time"
 					:class="{ selected: form.time === time }"
 					@click="form.time = time"
@@ -180,10 +199,25 @@ import { state, persist, id, now, allExperts } from "../services/store.js";
 import { validateContact } from "../services/domain.js";
 import { go, explain } from "../services/navigation.js";
 import { queueRecord, recordPayload } from "../services/sync.js";
-defineProps({ mode: String, params: Object });
+const props = defineProps({ mode: String, params: { type: Object, default: () => ({}) } });
 const experts = computed(() => allExperts().filter((expert) => expert && expert.available !== false));
 const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8080").replace(/\/$/, "");
 const expertImageUrl = (path) => `${apiBase}${path}`;
+const defaultTimes = ["10:00", "14:00", "16:00"];
+const makeBookingDates = (count = 62) => Array.from({ length: count }, (_, index) => {
+	const d = new Date();
+	d.setHours(0, 0, 0, 0);
+	d.setDate(d.getDate() + index + 1);
+	return {
+		value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+		label: `${d.getMonth() + 1}月${d.getDate()}日`,
+		week: "周" + ["日", "一", "二", "三", "四", "五", "六"][d.getDay()],
+	};
+});
+const dates = makeBookingDates();
+const selectedExpert = computed(() => experts.value.find((expert) => expert.id === props.params?.id) || experts.value[0]);
+const timesFor = (expert) => Array.isArray(expert?.availableTimes) && expert.availableTimes.length ? expert.availableTimes : defaultTimes;
+const previewDates = computed(() => dates.slice(0, 7));
 const expanded = ref(-1),
 	error = ref(""),
 	submitting = ref(false);
@@ -204,29 +238,39 @@ const methods = [
 	{ label: "电话咨询", icon: "phone" },
 	{ label: "线下咨询", icon: "map-pin" },
 ];
-const dates = Array.from({ length: 5 }, (_, i) => {
-	const d = new Date();
-	d.setDate(d.getDate() + i + 1);
-	return {
-		value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
-		label: `${d.getMonth() + 1}月${d.getDate()}日`,
-		week: "周" + ["日", "一", "二", "三", "四", "五", "六"][d.getDay()],
-	};
-});
 const topics = ["情绪与压力", "睡眠困扰", "人际关系", "亲子沟通", "其他"];
 const form = reactive({
+	expertId: props.params?.expert || experts.value[0]?.id || "",
 	method: "视频咨询",
-	date: dates[0].value,
-	time: "14:00",
+	date: props.params?.date && dates.some((day) => day.value === props.params.date) ? props.params.date : dates[0].value,
+	time: props.params?.time || "14:00",
 	name: "",
 	phone: "",
 	topic: topics[0],
 	message: "",
 	consent: true,
 });
+const selectedBookingExpert = computed(() => experts.value.find((expert) => expert.id === form.expertId) || experts.value[0]);
+const activeTimes = computed(() => timesFor(selectedBookingExpert.value));
+const bookingRangeLabel = computed(() => `${dates[0].label}至${dates[dates.length - 1].label}（共${dates.length}天）`);
+watch(() => props.params, (params = {}) => {
+	if (params.expert && experts.value.some((expert) => expert.id === params.expert)) form.expertId = params.expert;
+	if (params.date && dates.some((day) => day.value === params.date)) form.date = params.date;
+	if (params.time && activeTimes.value.includes(params.time)) form.time = params.time;
+}, { deep: true, immediate: true });
+watch(() => form.expertId, () => {
+	if (!activeTimes.value.includes(form.time)) form.time = activeTimes.value[0];
+});
+watch(experts, (list) => {
+	if (!form.expertId && list[0]) form.expertId = list[0].id;
+}, { immediate: true });
 watch(form, () => {
 	error.value = "";
 });
+function bookSlot(date, time) {
+	if (!selectedExpert.value) return;
+	go("booking", { expert: selectedExpert.value.id, date, time });
+}
 const privacy = () =>
 	explain(
 		"隐私保护说明",
@@ -251,8 +295,9 @@ function submit() {
 	submitting.value = true;
 	const booking = {
 		...form,
+		expertName: selectedBookingExpert.value?.name || selectedBookingExpert.value?.title || "",
 		id: id("booking"),
-		title: form.topic + "咨询",
+		title: `${selectedBookingExpert.value?.name || "专家"}${form.topic}咨询`,
 		status: "待确认",
 		createdAt: now(),
 	};
@@ -294,11 +339,24 @@ function submit() {
 	overflow: hidden;
 }
 .expert-list { display: flex; flex-direction: column; gap: 18rpx; }
-.expert-card { display: flex; gap: 20rpx; padding: 20rpx; align-items: flex-start; }
+.expert-card { display: flex; gap: 20rpx; padding: 20rpx; align-items: flex-start; width: 100%; text-align: left; }
 .expert-card > image, .expert-card > .artwork { width: 150rpx; height: 150rpx; padding-top: 0 !important; flex: 0 0 150rpx; border-radius: 24rpx; overflow: hidden; }
 .expert-photo { object-fit: cover; }
 .expert-copy { min-width: 0; flex: 1; }
 .expert-tags { display: flex; flex-wrap: wrap; gap: 8rpx; margin-top: 14rpx; }
+.expert-profile-card { display: flex; gap: 24rpx; padding: 24rpx; align-items: flex-start; }
+.expert-profile-card > image, .expert-profile-card > .artwork { width: 210rpx; height: 210rpx; padding-top: 0 !important; flex: 0 0 210rpx; border-radius: 28rpx; overflow: hidden; }
+.expert-detail-photo { object-fit: cover; }
+.expert-detail-copy { min-width: 0; flex: 1; }
+.availability-note { margin: 8rpx 0 18rpx; }
+.availability-preview { display: flex; flex-direction: column; gap: 14rpx; margin-bottom: 24rpx; }
+.availability-day { padding: 18rpx; border-radius: 16rpx; background: #f1f4ef; }
+.availability-times { display: flex; gap: 12rpx; margin-top: 14rpx; }
+.slot-button { flex: 1; padding: 12rpx 8rpx; border-radius: 12rpx; background: white; color: var(--primary); font-size: 24rpx; }
+.expert-picker-scroll, .dates-scroll { width: 100%; white-space: nowrap; }
+.expert-picker, .dates { display: flex; gap: 14rpx; width: max-content; }
+.expert-option { width: 240rpx; padding: 18rpx; border: 2rpx solid transparent; border-radius: 16rpx; background: #eef2ec; text-align: left; white-space: normal; }
+.expert-option.selected { border-color: var(--primary); background: #e3ede2; }
 .steps {
 	display: flex;
 	position: relative;
@@ -386,7 +444,8 @@ function submit() {
 	gap: 12rpx;
 }
 .date {
-	flex: 1;
+	width: 112rpx;
+	flex: 0 0 112rpx;
 	display: flex;
 	flex-direction: column;
 	align-items: center;

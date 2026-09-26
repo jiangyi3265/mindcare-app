@@ -33,6 +33,16 @@ try {
 		assert.equal(await page.getByText('将打开微信客服会话').count(), 0);
 		assert.equal(await page.locator('.support-card').count(), 0);
 		assert.equal(await page.locator('.booking-card').count(), 1);
+		await page.locator('.expert-card').first().click();
+		await page.getByText('已开放未来两个月的预约', { exact: false }).waitFor();
+		assert.equal(await page.locator('.availability-day').count(), 7);
+		assert.equal(await page.locator('.slot-button').count(), 21);
+		await page.locator('.slot-button').first().click();
+		await page.getByText('提交预约', { exact: true }).waitFor();
+		assert.equal(await page.locator('.date').count(), 62);
+		assert.ok(await page.locator('.expert-option.selected').count());
+		await page.goto(`${appUrl}/#/pages/consultation/index`, { waitUntil: 'domcontentloaded' });
+		await page.locator('.booking-card').waitFor();
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 		await page.screenshot({ path: join(tmpdir(), `mindcare-consultation-${width}.png`), fullPage: true });
 		await page.locator('.faq').first().click();

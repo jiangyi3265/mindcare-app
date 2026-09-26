@@ -4,6 +4,7 @@ export const routes = {
 	quiz: "assessment/quiz",
 	report: "assessment/report",
 	consultation: "consultation/index",
+	expert: "consultation/expert",
 	booking: "consultation/booking",
 	courses: "courses/index",
 	lesson: "courses/detail",
