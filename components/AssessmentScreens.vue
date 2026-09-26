@@ -112,6 +112,11 @@
 				class="muted description block"
 				>{{ scale.description }}</text
 			>
+			<view v-if="scale.sourceName" class="source-note soft-card mt-sm">
+				<text class="small block">量表来源：{{ scale.sourceName }}<text v-if="scale.version"> · {{ scale.version }}</text></text>
+				<text v-if="scale.license" class="tiny muted block mt-xs">授权/使用说明：{{ scale.license }}</text>
+				<text v-if="scale.sourceUrl" class="tiny muted block mt-xs">正式使用请以来源方授权版本和指导手册为准。</text>
+			</view>
 			<SectionHeading title="作答须知" icon="clock" /><view
 				class="guidelines"
 				><view
@@ -173,21 +178,21 @@
 			/></view>
 			<text class="badge neutral quiz-period">过去两周</text
 			><text class="question serif block">{{
-				scale.questions[questionIndex]
+				questionText
 			}}</text>
 			<view class="answers"
 				><button
-					v-for="(option, index) in options"
+					v-for="(option, index) in answerOptions"
 					:key="option"
 					class="ui-reset answer"
-					:class="{ selected: answers[questionIndex] === index }"
+					:class="{ selected: answers[questionIndex] === optionValue(index) }"
 					role="radio"
-					:aria-checked="answers[questionIndex] === index"
-					@click="selectAnswer(index)"
+					:aria-checked="answers[questionIndex] === optionValue(index)"
+					@click="selectAnswer(optionValue(index))"
 				>
 					<view class="radio-outer"
 						><view
-							v-if="answers[questionIndex] === index"
+							v-if="answers[questionIndex] === optionValue(index)"
 							class="radio-dot" /></view
 					><text>{{ option }}</text>
 				</button></view
@@ -236,15 +241,11 @@
 				><view class="report-leaves"><Artwork name="leaves" /></view
 				><view
 					class="score-ring"
-					:style="{
-						background: `conic-gradient(#e9b89c 0% ${report.score}%, #dce3d7 ${report.score}% 100%)`,
-					}"
+					:style="{ background: `conic-gradient(${reportRisk.level !== 'normal' ? '#c95f5f' : '#e9b89c'} 0% ${reportPercent}%, #dce3d7 ${reportPercent}% 100%)` }"
 					><view class="score-inner"
-						><text class="score">{{ report.score }}</text
-						><text class="small">情绪状态指数</text
-						><text class="badge peach">{{
-							report.score >= 45 ? "建议关注" : "保持关照"
-						}}</text></view
+						><text class="score" :class="{ 'risk-score': reportRisk.level !== 'normal' }">{{ report.score }}</text
+						><text class="small">{{ scoreLabel }}</text
+						><text class="badge" :class="reportRisk.level !== 'normal' ? 'risk-badge' : 'peach'">{{ reportRisk.level !== 'normal' ? "需要及时关注" : "保持关照" }}</text></view
 					></view
 				></view
 			>
@@ -265,6 +266,7 @@
 				></view
 			>
 			<view class="report-card card card-pad mt"
+				><view v-if="reportRisk.level !== 'normal'" class="risk-alert" role="alert"><UiIcon name="shield-check" tone="danger" :size="30" /><view><text class="body-title block">测评预警</text><text class="small block mt-xs">{{ reportRisk.reason }}</text><text class="tiny block mt-xs">如存在现实危险或无法保证安全，请立即联系当地急救服务或危机干预机构。</text></view></view
 				><SectionHeading
 					title="结果解读"
 					icon="chat-circle-dots"
@@ -308,14 +310,14 @@
 import { computed, ref, watch } from "vue";
 import { state, allScales, allBanners, persist, id, now } from "../services/store.js";
 import { options } from "../data/catalog.js";
-import { calculateScore } from "../services/domain.js";
+import { calculateAssessmentScore, evaluateAssessmentRisk } from "../services/domain.js";
 import { go, toast } from "../services/navigation.js";
 import { queueRecord, recordPayload } from "../services/sync.js";
 const props = defineProps({
 	mode: String,
 	params: { type: Object, default: () => ({}) },
 });
-const categories = ["全部", "情绪", "睡眠", "压力", "人际"];
+const categories = ["全部", "幸福感", "人格", "情绪", "睡眠", "压力", "人际", "职业", "认知", "气质"];
 const banners = computed(() => allBanners().filter((item) => item?.id && typeof item.image === 'string' && /^(builtin:(hero|rest)|\/profile\/upload\/[A-Za-z0-9/_-]+\.(png|jpe?g|webp))$/.test(item.image)));
 const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8080").replace(/\/$/, "");
 const bannerImageUrl = (path) => `${apiBase}${path}`;
@@ -338,6 +340,12 @@ const visibleScales = computed(() =>
 const scale = computed(
 	() => allScales().find((s) => s.id === props.params.id) || allScales()[0],
 );
+const answerOptions = computed(() => Array.isArray(scale.value?.options) && scale.value.options.length ? scale.value.options : options);
+const optionValue = (index) => Number.isFinite(Number(scale.value?.optionValues?.[index])) ? Number(scale.value.optionValues[index]) : index;
+const questionText = computed(() => {
+	const item = scale.value?.questions?.[questionIndex.value];
+	return typeof item === "string" ? item : (item?.text || item?.question || "");
+});
 const latest = computed(() => state.reports[0]);
 const answers = ref([]),
 	questionIndex = ref(0);
@@ -384,7 +392,8 @@ function nextQuestion() {
 		saveDraft();
 		return;
 	}
-	const score = calculateScore(answers.value, scale.value.count);
+	const score = calculateAssessmentScore(scale.value, answers.value);
+	const risk = evaluateAssessmentRisk(scale.value, score);
 	const record = {
 		id: id("report"),
 		scaleId: scale.value.id,
@@ -392,6 +401,8 @@ function nextQuestion() {
 		score,
 		date: now(),
 		answers: [...answers.value],
+		riskLevel: risk.level,
+		riskReason: risk.reason,
 	};
 	state.reports.unshift(record);
 	delete state.drafts[scale.value.id];
@@ -401,10 +412,14 @@ function nextQuestion() {
 			title: scale.value.title,
 			status: "completed",
 			score,
+			riskLevel: risk.level,
+			riskReason: risk.reason,
 		}),
 	);
-	if (persist())
-		uni.redirectTo({ url: `/pages/assessment/report?record=${record.id}` });
+	const redirect = () => { if (persist()) uni.redirectTo({ url: `/pages/assessment/report?record=${record.id}` }); };
+	if (risk.level !== "normal") {
+		uni.showModal({ title: "测评预警", content: risk.reason, showCancel: false, success: redirect });
+	} else redirect();
 }
 const report = computed(
 	() =>
@@ -427,6 +442,15 @@ const metrics = computed(() =>
 				),
 	})),
 );
+const reportScale = computed(() => allScales().find((item) => item.id === report.value.scaleId));
+const reportRisk = computed(() => report.value.riskLevel && report.value.riskLevel !== "normal"
+	? { level: report.value.riskLevel, reason: report.value.riskReason || "测评结果提示需要进一步关注。" }
+	: evaluateAssessmentRisk(reportScale.value, Number(report.value.score) || 0));
+const scoreLabel = computed(() => reportScale.value?.scoring?.label || "状态指数");
+const reportPercent = computed(() => {
+	const max = Number(reportScale.value?.scoring?.maxScore) || 100;
+	return Math.max(0, Math.min(100, Math.round((Number(report.value.score || 0) / max) * 100)));
+});
 const suggestions = [
 	{ icon: "moon", title: "规律作息" },
 	{ icon: "person-simple-run", title: "适度运动" },
@@ -508,6 +532,7 @@ function saveReport() {
 	font-size: 27rpx;
 	line-height: 1.8;
 }
+.source-note { padding: 20rpx; }
 .guidelines {
 	display: flex;
 	flex-direction: column;
@@ -593,6 +618,9 @@ function saveReport() {
 	z-index: 1;
 	transform: rotate(-30deg);
 }
+.risk-score { color: #b33e3e; }
+.risk-badge { background: #fde5e5; color: #a53e3e; }
+.risk-alert { display: flex; gap: 18rpx; padding: 20rpx; border-radius: 18rpx; background: #fff2f1; color: #8e3333; margin-bottom: 26rpx; }
 .score-inner {
 	width: 100%;
 	height: 100%;

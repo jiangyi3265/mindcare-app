@@ -67,6 +67,7 @@ const seed = {
 	serverCourses: [],
 	serverActivities: [],
 	serverBanners: [],
+	serverExperts: [],
 	serverBannersLoaded: false,
 	serverContentLoaded: false,
 	pendingSync: [],
@@ -114,6 +115,10 @@ export const allActivities = () =>
 export const allBanners = () => state.serverBannersLoaded ? state.serverBanners : [
 	{ id: 'home-welcome', title: '给心情，一点被看见的时间', image: 'builtin:hero' },
 	{ id: 'home-rest', title: '慢下来，听见自己', image: 'builtin:rest' },
+];
+export const allExperts = () => state.serverContentLoaded ? state.serverExperts : [
+	{ id: "expert-lin", name: "林老师", title: "林老师", photo: "builtin:avatar", credentials: "情绪与压力支持", profile: "擅长情绪管理、压力与睡眠议题。", methods: ["情绪管理", "压力调节"] },
+	{ id: "expert-zhou", name: "周老师", title: "周老师", photo: "builtin:avatar", credentials: "亲子与关系支持", profile: "关注亲子沟通、人际关系与成长议题。", methods: ["亲子沟通", "人际关系"] },
 ];
 export function resetData() {
 	uni.removeStorageSync(KEY);

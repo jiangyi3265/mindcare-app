@@ -72,7 +72,7 @@ function applyRecords(records = []) {
 	records.forEach((record) => {
 		const data = parseData(record.dataJson);
 		if (record.recordType === "assessment") {
-			reports.push({ ...data, id: record.recordKey, scaleId: record.contentKey, title: record.title, score: record.score, date: data.date || record.createTime });
+			reports.push({ ...data, id: record.recordKey, scaleId: record.contentKey, title: record.title, score: record.score, riskLevel: record.riskLevel || data.riskLevel || "normal", riskReason: record.riskReason || data.riskReason || "", date: data.date || record.createTime });
 		} else if (record.recordType === "consultation") {
 			bookings.push({ ...data, id: record.recordKey, title: record.title || data.title, status: bookingStatus(record.status), createdAt: data.createdAt || record.createTime });
 		} else if (record.recordType === "course") {
@@ -103,6 +103,7 @@ function applyBootstrap(data) {
 	state.serverCourses = Array.isArray(data.courses) ? data.courses : [];
 	state.serverActivities = Array.isArray(data.activities) ? data.activities : [];
 	state.serverBanners = Array.isArray(data.banners) ? data.banners : [];
+	state.serverExperts = Array.isArray(data.experts) ? data.experts : [];
 	state.serverBannersLoaded = true;
 	state.serverContentLoaded = true;
 	applyRecords(data.records);

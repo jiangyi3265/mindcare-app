@@ -24,6 +24,14 @@
 					</button></view
 				></view
 			>
+			<SectionHeading title="咨询专家" action="预约" @action="go('booking')" />
+			<view class="expert-list">
+				<view v-for="expert in experts" :key="expert.id" class="card expert-card">
+					<Artwork v-if="expert.photo === 'builtin:avatar'" name="avatar" :alt="expert.name || expert.title" :aspect="1" />
+					<image v-else :src="expertImageUrl(expert.photo)" class="expert-photo" mode="aspectFill" :alt="expert.name || expert.title" />
+					<view class="expert-copy"><text class="body-title block">{{ expert.name || expert.title }}</text><text class="tiny muted block mt-xs">{{ expert.credentials }}</text><text class="small muted block mt-xs">{{ expert.profile }}</text><view class="expert-tags"><text v-for="method in (expert.methods || []).slice(0, 3)" :key="method" class="badge neutral">{{ method }}</text></view></view>
+				</view>
+			</view>
 			<SectionHeading title="服务流程" />
 			<view class="steps"
 				><view
@@ -167,12 +175,15 @@
 	</AppShell>
 </template>
 <script setup>
-import { ref, reactive, watch } from "vue";
-import { state, persist, id, now } from "../services/store.js";
+import { ref, reactive, watch, computed } from "vue";
+import { state, persist, id, now, allExperts } from "../services/store.js";
 import { validateContact } from "../services/domain.js";
 import { go, explain } from "../services/navigation.js";
 import { queueRecord, recordPayload } from "../services/sync.js";
 defineProps({ mode: String, params: Object });
+const experts = computed(() => allExperts().filter((expert) => expert && expert.available !== false));
+const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8080").replace(/\/$/, "");
+const expertImageUrl = (path) => `${apiBase}${path}`;
 const expanded = ref(-1),
 	error = ref(""),
 	submitting = ref(false);
@@ -282,6 +293,12 @@ function submit() {
 	border-radius: 12rpx;
 	overflow: hidden;
 }
+.expert-list { display: flex; flex-direction: column; gap: 18rpx; }
+.expert-card { display: flex; gap: 20rpx; padding: 20rpx; align-items: flex-start; }
+.expert-card > image, .expert-card > .artwork { width: 150rpx; height: 150rpx; flex: 0 0 150rpx; border-radius: 24rpx; overflow: hidden; }
+.expert-photo { object-fit: cover; }
+.expert-copy { min-width: 0; flex: 1; }
+.expert-tags { display: flex; flex-wrap: wrap; gap: 8rpx; margin-top: 14rpx; }
 .steps {
 	display: flex;
 	position: relative;

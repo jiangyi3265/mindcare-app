@@ -10,6 +10,28 @@ export function calculateScore(answers, count) {
 		(answers.reduce((sum, v) => sum + v, 0) / (count * 3)) * 100,
 	);
 }
+export function calculateAssessmentScore(scale, answers) {
+	const values = Array.isArray(scale?.optionValues) && scale.optionValues.length
+		? scale.optionValues.map(Number) : [0, 1, 2, 3];
+	if (!scale || !Number.isInteger(scale.count) || answers.length !== scale.count ||
+		answers.some((value) => !Number.isInteger(value) || !values.includes(value))) {
+		throw new Error("请完成所有题目");
+	}
+	const total = answers.reduce((sum, value) => sum + value, 0);
+	const scoring = scale.scoring || {};
+	if (scoring.type === "sum") return total;
+	const max = Number(scoring.maxScore) || scale.count * Math.max(...values);
+	return Math.round((total / max) * 100);
+}
+export function evaluateAssessmentRisk(scale, score) {
+	const rules = scale?.crisisRules;
+	if (!rules || rules.direction === "none") return { level: "normal", reason: "" };
+	const threshold = Number(rules.threshold);
+	const triggered = rules.direction === "low" ? score <= threshold : score >= threshold;
+	return triggered
+		? { level: rules.level || "high", reason: rules.reason || "测评结果提示需要进一步关注。" }
+		: { level: "normal", reason: "" };
+}
 export function validateContact(name, phone, consent) {
 	if (!name.trim()) return "请填写称呼或姓名";
 	if (!/^1[3-9]\d{9}$/.test(phone.trim())) return "请填写正确的11位手机号";
@@ -71,6 +93,14 @@ export function parseScale(source) {
 		count: data.questions.length,
 		minutes: data.minutes || 5,
 		category: data.category || "情绪",
+		options: Array.isArray(data.options) && data.options.length ? data.options.map(String) : undefined,
+		optionValues: Array.isArray(data.optionValues) && data.optionValues.length ? data.optionValues.map(Number) : undefined,
+		scoring: data.scoring && typeof data.scoring === "object" ? data.scoring : undefined,
+		crisisRules: data.crisisRules && typeof data.crisisRules === "object" ? data.crisisRules : undefined,
+		sourceName: typeof data.sourceName === "string" ? data.sourceName : "",
+		sourceUrl: typeof data.sourceUrl === "string" ? data.sourceUrl : "",
+		license: typeof data.license === "string" ? data.license : "",
+		version: typeof data.version === "string" ? data.version : "",
 		art: "flowers",
 		hero: "rest",
 	};
