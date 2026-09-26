@@ -42,8 +42,8 @@
 				</button></view
 			>
 			<SectionHeading
-				:title="`测评量表（${allScales().length}）`"
-				:action="showAll ? '收起' : '查看全部'"
+				:title="`测评量表（${homeScales.length}）`"
+				:action="homeScales.length > 10 ? (showAll ? '收起' : '查看全部') : ''"
 				@action="showAll = !showAll"
 			/>
 			<view class="assessment-grid"
@@ -334,8 +334,12 @@ const category = ref("全部"),
 	search = ref(""),
 	showAll = ref(false),
 	consent = ref(true);
+const hiddenLocalDemoIds = new Set(["emotion", "sleep", "stress", "social"]);
+const homeScales = computed(() => allScales().filter((item) =>
+	state.serverContentLoaded || !hiddenLocalDemoIds.has(item.id),
+));
 const visibleScales = computed(() =>
-	allScales()
+	homeScales.value
 		.filter(
 			(s) =>
 				(category.value === "全部" || s.category === category.value) &&
