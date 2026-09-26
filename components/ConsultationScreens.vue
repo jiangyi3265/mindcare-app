@@ -29,7 +29,7 @@
 				<button v-for="expert in experts" :key="expert.id" class="ui-reset card expert-card" type="button" :aria-label="`查看${expert.name || expert.title}的可预约时间`" @click="go('expert', { id: expert.id })">
 					<Artwork v-if="expert.photo === 'builtin:avatar'" name="avatar" :alt="expert.name || expert.title" :aspect="1" />
 					<image v-else :src="expertImageUrl(expert.photo)" class="expert-photo" mode="aspectFill" :alt="expert.name || expert.title" />
-					<view class="expert-copy"><text class="body-title block">{{ expert.name || expert.title }}</text><text class="tiny muted block mt-xs">{{ expert.credentials }}</text><text class="small muted block mt-xs">{{ expert.profile }}</text><view class="expert-tags"><text v-for="method in (expert.methods || []).slice(0, 3)" :key="method" class="badge neutral">{{ method }}</text></view></view>
+					<view class="expert-copy"><text class="body-title block">{{ expert.name || expert.title }}</text><text class="tiny muted block mt-xs">{{ expert.credentials }}</text><text class="small muted block mt-xs">{{ expert.profile }}</text><view class="expert-tags"><text v-for="method in (expert.methods || []).slice(0, 3)" :key="method" class="badge neutral">{{ method }}</text></view><text class="tiny expert-cta block mt-sm">查看详情 · 选择预约时段</text></view>
 					<UiIcon name="caret-right" :size="25" />
 				</button>
 			</view>
@@ -201,7 +201,7 @@ import { go, explain } from "../services/navigation.js";
 import { queueRecord, recordPayload } from "../services/sync.js";
 const props = defineProps({ mode: String, params: { type: Object, default: () => ({}) } });
 const experts = computed(() => allExperts().filter((expert) => expert && expert.available !== false));
-const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8080").replace(/\/$/, "");
+const apiBase = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
 const expertImageUrl = (path) => `${apiBase}${path}`;
 const defaultTimes = ["10:00", "14:00", "16:00"];
 const makeBookingDates = (count = 62) => Array.from({ length: count }, (_, index) => {
@@ -343,6 +343,7 @@ function submit() {
 .expert-card > image, .expert-card > .artwork { width: 150rpx; height: 150rpx; padding-top: 0 !important; flex: 0 0 150rpx; border-radius: 24rpx; overflow: hidden; }
 .expert-photo { object-fit: cover; }
 .expert-copy { min-width: 0; flex: 1; }
+.expert-cta { color: var(--primary); font-weight: 600; }
 .expert-tags { display: flex; flex-wrap: wrap; gap: 8rpx; margin-top: 14rpx; }
 .expert-profile-card { display: flex; gap: 24rpx; padding: 24rpx; align-items: flex-start; }
 .expert-profile-card > image, .expert-profile-card > .artwork { width: 210rpx; height: 210rpx; padding-top: 0 !important; flex: 0 0 210rpx; border-radius: 28rpx; overflow: hidden; }

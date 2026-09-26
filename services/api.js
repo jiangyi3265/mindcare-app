@@ -1,4 +1,7 @@
-const configuredBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+// Use the same-origin reverse proxy when no build-time API URL is supplied.
+// This keeps production H5 builds connected to the deployed backend while
+// preserving the Vite /api development proxy.
+const configuredBase = import.meta.env.VITE_API_BASE_URL || "/api";
 const API_BASE = configuredBase.replace(/\/$/, "");
 
 function request(path, options = {}) {

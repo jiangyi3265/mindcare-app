@@ -33,6 +33,7 @@ try {
 		assert.equal(await page.getByText('将打开微信客服会话').count(), 0);
 		assert.equal(await page.locator('.support-card').count(), 0);
 		assert.equal(await page.locator('.booking-card').count(), 1);
+		assert.equal(await page.getByText('查看详情 · 选择预约时段', { exact: true }).count(), await page.locator('.expert-card').count());
 		await page.locator('.expert-card').first().click();
 		await page.getByText('已开放未来两个月的预约', { exact: false }).waitFor();
 		assert.equal(await page.locator('.availability-day').count(), 7);
