@@ -2,11 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
 	calculateScore,
+	calculateAssessmentScore,
 	evaluateAssessmentRisk,
 	validateContact,
 	validateEnrollment,
 	parseScale,
 } from "../services/domain.js";
+import { scales } from "../data/catalog.js";
 test("计分拒绝漏答与无效选项，并正确计算边界", () => {
 	assert.equal(calculateScore([0, 0], 2), 0);
 	assert.equal(calculateScore([3, 3], 2), 100);
@@ -80,4 +82,17 @@ test("答案级危机规则可触发预警，即使总分未达到阈值", () =>
 	assert.equal(evaluateAssessmentRisk(scale, 1, [0, 0, 0, 0, 0, 0, 0, 0, 1]).level, "high");
 	assert.equal(evaluateAssessmentRisk(scale, 1, [0, 0, 0, 0, 0, 0, 0, 0, 0]).level, "normal");
 	assert.equal(evaluateAssessmentRisk({ crisisRules: { direction: "none", answerIndex: 0, answerMin: 1, level: "high" } }, 0, [1]).level, "high");
+});
+test("新增 K6/K10 与 RSES 计分和安全规则", () => {
+	const k6 = scales.find((scale) => scale.id === "k6");
+	const k10 = scales.find((scale) => scale.id === "k10");
+	const rses = scales.find((scale) => scale.id === "rses-10");
+	assert.equal(calculateAssessmentScore(k6, Array(6).fill(4)), 24);
+	assert.equal(calculateAssessmentScore(k10, Array(10).fill(4)), 40);
+	assert.equal(calculateAssessmentScore(rses, [3, 3, 0, 3, 0, 3, 3, 0, 0, 0]), 30);
+	assert.equal(calculateAssessmentScore(rses, [0, 0, 3, 0, 3, 0, 0, 3, 3, 3]), 0);
+	assert.equal(evaluateAssessmentRisk(k6, 24).level, "normal");
+	assert.equal(evaluateAssessmentRisk(k10, 40).level, "normal");
+	assert.equal(evaluateAssessmentRisk(rses, 0).level, "normal");
+	assert.throws(() => calculateAssessmentScore(rses, Array(9).fill(0)));
 });

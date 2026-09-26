@@ -17,8 +17,15 @@ export function calculateAssessmentScore(scale, answers) {
 		answers.some((value) => !Number.isInteger(value) || !values.includes(value))) {
 		throw new Error("请完成所有题目");
 	}
-	const total = answers.reduce((sum, value) => sum + value, 0);
 	const scoring = scale.scoring || {};
+	const reverseItems = Array.isArray(scoring.reverseItems) ? scoring.reverseItems : [];
+	const minValue = Math.min(...values);
+	const maxValue = Math.max(...values);
+	if (reverseItems.some((index) => !Number.isInteger(index) || index < 0 || index >= answers.length)) {
+		throw new Error("量表反向计分配置不正确");
+	}
+	const total = answers.reduce((sum, value, index) =>
+		sum + (reverseItems.includes(index) ? minValue + maxValue - value : value), 0);
 	if (scoring.type === "sum") return total;
 	const max = Number(scoring.maxScore) || scale.count * Math.max(...values);
 	return Math.round((total / max) * 100);

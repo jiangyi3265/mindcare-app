@@ -42,8 +42,8 @@
 				</button></view
 			>
 			<SectionHeading
-				title="热门测评"
-				action="更多"
+				:title="`测评量表（${allScales().length}）`"
+				:action="showAll ? '收起' : '查看全部'"
 				@action="showAll = !showAll"
 			/>
 			<view class="assessment-grid"
@@ -113,15 +113,16 @@
 				>{{ scale.description }}</text
 			>
 			<view v-if="scale.sourceName" class="source-note soft-card mt-sm">
-				<text class="small block">量表来源：{{ scale.sourceName }}<text v-if="scale.version"> · {{ scale.version }}</text></text>
+				<text class="small block">{{ scale.isExploratory ? '' : '量表来源：' }}{{ scale.sourceName }}<text v-if="scale.version"> · {{ scale.version }}</text></text>
 				<text v-if="scale.license" class="tiny muted block mt-xs">授权/使用说明：{{ scale.license }}</text>
-				<text v-if="scale.sourceUrl" class="tiny muted block mt-xs">正式使用请以来源方授权版本和指导手册为准。</text>
+				<button v-if="scale.sourceUrl" class="ui-reset tiny source-link block mt-xs" @click="openScaleSource">{{ scale.isExploratory ? '查看理论参考' : '查看量表原始来源' }}</button>
+				<text v-if="scale.sourceUrl && !scale.isExploratory" class="tiny muted block mt-xs">正式使用请以来源方授权版本和指导手册为准。</text>
 			</view>
 			<SectionHeading title="作答须知" icon="clock" /><view
 				class="guidelines"
 				><view
 					v-for="line in [
-						'请根据近两周的实际感受作答',
+						quizPeriod ? `请根据${quizPeriod}的实际感受作答` : '请根据自身实际情况作答',
 						'结果仅供自我了解，不作为临床诊断',
 						'请在安静的环境中独立完成',
 					]"
@@ -135,7 +136,7 @@
 				></view
 			>
 			<text class="tiny muted block mt"
-				>当前为体验量表，用于展示答题与报告流程。</text
+				>{{ scale.isExploratory ? '这是自编体验题组，不能代替标准测评或专业评估。' : '请结合量表来源理解结果；测评不替代专业评估。' }}</text
 			>
 		</view>
 		<template #footer
@@ -176,7 +177,7 @@
 						width: ((questionIndex + 1) / scale.count) * 100 + '%',
 					}"
 			/></view>
-			<text class="badge neutral quiz-period">过去两周</text
+			<text v-if="quizPeriod" class="badge neutral quiz-period">{{ quizPeriod }}</text
 			><text class="question serif block">{{
 				questionText
 			}}</text>
@@ -237,7 +238,7 @@
 				}}
 				完成测评</text
 			>
-			<view class="report-hero"
+			<view v-if="!reportScale?.isExploratory" class="report-hero"
 				><view class="report-leaves"><Artwork name="leaves" /></view
 				><view
 					class="score-ring"
@@ -245,11 +246,13 @@
 					><view class="score-inner"
 						><text class="score" :class="{ 'risk-score': reportRisk.level !== 'normal' }">{{ report.score }}</text
 						><text class="small">{{ scoreLabel }}</text
-						><text class="badge" :class="reportRisk.level !== 'normal' ? 'risk-badge' : 'peach'">{{ reportRisk.level !== 'normal' ? "需要及时关注" : "保持关照" }}</text></view
+						><text class="badge" :class="reportRisk.level !== 'normal' ? 'risk-badge' : 'peach'">{{ reportRisk.level !== 'normal' ? "需要及时关注" : "仅供参考" }}</text></view
 					></view
 				></view
 			>
-			<view class="metrics"
+			<view v-else class="soft-card small exploratory-complete">已完成体验题组 · 不生成标准心理测量分数</view>
+			<view v-if="reportScale?.scoring" class="soft-card small report-score-note">{{ reportScale.interpretation || `本次得分为 ${report.score}，请结合量表来源理解结果。` }}</view>
+			<view v-else class="metrics"
 				><view
 					v-for="(metric, index) in metrics"
 					:key="metric.label"
@@ -273,9 +276,13 @@
 				/><text class="muted small block" :class="{ 'risk-copy': reportRisk.level !== 'normal' }">{{
 					reportRisk.level !== "normal"
 						? "本次结果触发了风险预警，请优先寻求专业支持，并关注当下安全。"
-						: report.score >= 45
-							? "近期可能感到疲惫，试着留出休息时间。"
-							: "你的状态较为平稳，请继续照顾自己的感受。"
+					: reportScale?.isExploratory
+							? "这是自编体验题组，仅供回顾具体回答，不能据作答合计判断人格、能力或职业适配。"
+					: reportScale?.scoring
+							? "请结合上方计分说明理解结果；未触发平台预警不代表没有心理困扰。"
+							: report.score >= 45
+								? "近期可能感到疲惫，试着留出休息时间。"
+								: "你的状态较为平稳，请继续照顾自己的感受。"
 				}}</text
 				><SectionHeading title="给你的建议" icon="plant" /><view
 					class="suggestions"
@@ -319,7 +326,7 @@ const props = defineProps({
 	mode: String,
 	params: { type: Object, default: () => ({}) },
 });
-const categories = ["全部", "幸福感", "抑郁", "焦虑", "人格", "情绪智商", "情绪", "睡眠", "压力", "人际", "职业", "认知", "气质"];
+const categories = ["全部", "幸福感", "抑郁", "焦虑", "心理困扰", "自我认知", "人格", "情绪智商", "情绪", "睡眠", "压力", "人际", "职业", "认知", "气质"];
 const banners = computed(() => allBanners().filter((item) => item?.id && typeof item.image === 'string' && /^(builtin:(hero|rest)|\/profile\/upload\/[A-Za-z0-9/_-]+\.(png|jpe?g|webp))$/.test(item.image)));
 const apiBase = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
 const bannerImageUrl = (path) => `${apiBase}${path}`;
@@ -336,12 +343,13 @@ const visibleScales = computed(() =>
 		)
 		.slice(
 			0,
-			showAll.value || category.value !== "全部" || search.value ? 99 : 2,
+			showAll.value || category.value !== "全部" || search.value ? 99 : 10,
 		),
 );
 const scale = computed(
 	() => allScales().find((s) => s.id === props.params.id) || allScales()[0],
 );
+const quizPeriod = computed(() => scale.value?.period || (["who5", "phq-9", "gad-7"].includes(scale.value?.id) ? "过去两周" : ""));
 const answerOptions = computed(() => Array.isArray(scale.value?.options) && scale.value.options.length ? scale.value.options : options);
 const optionValue = (index) => Number.isFinite(Number(scale.value?.optionValues?.[index])) ? Number(scale.value.optionValues[index]) : index;
 const questionText = computed(() => {
@@ -465,9 +473,14 @@ function restart() {
 }
 function saveReport() {
 	uni.setClipboardData({
-		data: `${report.value.title}\n${report.value.date}\n状态指数：${report.value.score}\n本结果仅供自我了解，不作为临床诊断。`,
+		data: `${report.value.title}\n${report.value.date}\n${reportScale.value?.isExploratory ? '自编体验题组：已完成，不提供标准分数' : `${scoreLabel.value}：${report.value.score}`}\n本结果仅供自我了解，不作为临床诊断。`,
 		success: () => toast("报告摘要已复制"),
 	});
+}
+function openScaleSource() {
+	if (!scale.value?.sourceUrl) return;
+	if (typeof window !== "undefined") window.open(scale.value.sourceUrl, "_blank", "noopener,noreferrer");
+	else uni.setClipboardData({ data: scale.value.sourceUrl, success: () => toast("来源网址已复制") });
 }
 </script>
 <style scoped>
@@ -487,7 +500,7 @@ function saveReport() {
 	margin-top: 8rpx;
 }
 .home-main .chip {
-	flex: 1;
+	flex: 0 0 auto;
 	padding-left: 16rpx;
 	padding-right: 16rpx;
 }
@@ -624,6 +637,8 @@ function saveReport() {
 .risk-badge { background: #fde5e5; color: #a53e3e; }
 .risk-alert { display: flex; gap: 18rpx; padding: 20rpx; border-radius: 18rpx; background: #fff2f1; color: #8e3333; margin-bottom: 26rpx; }
 .risk-copy { color: #8e3333; }
+.report-score-note { margin-top: 8rpx; line-height: 1.6; }
+.source-link { color: #4d7965; text-decoration: underline; text-align: left; }
 .score-inner {
 	width: 100%;
 	height: 100%;
