@@ -61,6 +61,24 @@ export const scales = [
 		questions: ["我喜欢探索新鲜的想法。", "我做事有条理并按计划完成。", "我愿意主动与人交流。", "我通常会体谅别人的感受。", "我容易因小事过度担心。", "我喜欢欣赏艺术、音乐或文学。", "我会认真检查自己的工作。", "在群体中我常常主动发言。", "我愿意帮助遇到困难的人。", "遇到压力时我能较快恢复平静。", "我对不同观点保持好奇。", "我会坚持完成已经开始的事情。", "我能自然地认识新朋友。", "我会尊重并接纳他人的差异。", "我常常觉得自己难以放松。", "我喜欢学习不熟悉的知识。", "我会提前安排重要任务。", "我享受参加社交活动。", "朋友需要时我愿意倾听。", "我能稳定地处理日常压力。"],
 	},
 	{
+		id: "ipip-temperament-12", title: "IPIP气质倾向简表", category: "气质", count: 12, minutes: 3, art: "sunrise", hero: "rest",
+		description: "基于 IPIP 公开领域题库的中文工作译本，观察精力、社交与压力反应方式。", sourceName: "International Personality Item Pool (IPIP)", sourceUrl: "https://www.ipip.ori.org/", license: "Public domain item pool", version: "IPIP temperament seed",
+		options: ["非常不符合", "不太符合", "比较符合", "非常符合"], optionValues: [0, 1, 2, 3], scoring: { type: "sum", maxScore: 36, label: "气质倾向分" }, crisisRules: { direction: "none" },
+		questions: ["我喜欢保持忙碌和充满活力。", "我在陌生环境中也能较快适应。", "我愿意主动表达自己的想法。", "我做决定时通常比较果断。", "我喜欢独处并从中恢复精力。", "我遇到变化时会先观察再行动。", "我容易因为压力而变得急躁。", "我会为重要目标持续投入。", "我在社交场合通常比较放松。", "我更偏好安静、稳定的生活节奏。", "我愿意尝试新的活动和体验。", "我能在兴奋后较快恢复平静。"],
+	},
+	{
+		id: "ipip-emotional-12", title: "IPIP情绪能力体验", category: "情绪智商", count: 12, minutes: 3, art: "flowers", hero: "counseling",
+		description: "基于 IPIP 公开领域题库的情绪觉察与共情体验测评；不是 WLEIS 等授权工具的替代品。", sourceName: "International Personality Item Pool (IPIP)", sourceUrl: "https://www.ipip.ori.org/", license: "Public domain item pool", version: "IPIP emotionality seed",
+		options: ["非常不符合", "不太符合", "比较符合", "非常符合"], optionValues: [0, 1, 2, 3], scoring: { type: "sum", maxScore: 36, label: "情绪能力体验分" }, crisisRules: { direction: "none" },
+		questions: ["我能较准确地说出自己正在经历的情绪。", "我会留意身体发出的紧张或疲惫信号。", "我能用合适的方式表达自己的需要。", "我愿意耐心听完别人的感受。", "我能理解别人话语背后的情绪。", "冲突后我会思考双方真正关心的事情。", "我遇到挫折时会寻找可行的调整方式。", "我会给自己留出恢复情绪的时间。", "我能在压力下保持基本的沟通。", "我愿意为自己的情绪负责。", "我会用尊重的方式提出不同意见。", "朋友需要倾诉时我知道如何陪伴。"],
+	},
+	{
+		id: "onet-riasec-12", title: "O*NET职业兴趣方向", category: "职业", count: 12, minutes: 3, art: "meadow", hero: "activityHero",
+		description: "参考美国劳工部 O*NET Interest Profiler 的 RIASEC 兴趣框架，探索更感兴趣的工作活动类型。", sourceName: "U.S. Department of Labor O*NET Interest Profiler", sourceUrl: "https://www.onetcenter.org/IP.html", license: "O*NET data/public-domain reference; verify current terms", version: "RIASEC experience seed",
+		options: ["非常不喜欢", "不太喜欢", "比较喜欢", "非常喜欢"], optionValues: [0, 1, 2, 3], scoring: { type: "sum", maxScore: 36, label: "职业兴趣体验分" }, crisisRules: { direction: "none" },
+		questions: ["动手安装、修理或操作设备。", "观察自然现象并记录数据。", "设计海报、文字或视觉作品。", "帮助他人解决学习或生活问题。", "组织团队完成计划或项目。", "整理资料、表格和流程。", "使用工具制作或改造物品。", "阅读研究报告并寻找规律。", "创作故事、音乐或影像内容。", "倾听并支持需要帮助的人。", "说服他人接受一个方案。", "按步骤处理文件和信息。"],
+	},
+	{
 		id: "emotion",
 		title: "情绪状态自评",
 		category: "情绪",
