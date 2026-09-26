@@ -266,7 +266,7 @@
 				></view
 			>
 			<view class="report-card card card-pad mt"
-				><view v-if="reportRisk.level !== 'normal'" class="risk-alert" role="alert"><UiIcon name="shield-check" tone="danger" :size="30" /><view><text class="body-title block">测评预警</text><text class="small block mt-xs">{{ reportRisk.reason }}</text><text class="tiny block mt-xs">如存在现实危险或无法保证安全，请立即联系当地急救服务或危机干预机构。</text></view></view
+				><view v-if="reportRisk.level !== 'normal'" class="risk-alert" role="alert"><UiIcon name="shield-check" tone="peach" :size="30" /><view><text class="body-title block">测评预警</text><text class="small block mt-xs">{{ reportRisk.reason }}</text><text class="tiny block mt-xs">如存在现实危险或无法保证安全，请立即联系当地急救服务或危机干预机构。</text></view></view
 				><SectionHeading
 					title="结果解读"
 					icon="chat-circle-dots"
