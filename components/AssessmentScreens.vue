@@ -270,10 +270,12 @@
 				><SectionHeading
 					title="结果解读"
 					icon="chat-circle-dots"
-				/><text class="muted small block">{{
-					report.score >= 45
-						? "近期可能感到疲惫，试着留出休息时间。"
-						: "你的状态较为平稳，请继续照顾自己的感受。"
+				/><text class="muted small block" :class="{ 'risk-copy': reportRisk.level !== 'normal' }">{{
+					reportRisk.level !== "normal"
+						? "本次结果触发了风险预警，请优先寻求专业支持，并关注当下安全。"
+						: report.score >= 45
+							? "近期可能感到疲惫，试着留出休息时间。"
+							: "你的状态较为平稳，请继续照顾自己的感受。"
 				}}</text
 				><SectionHeading title="给你的建议" icon="plant" /><view
 					class="suggestions"
@@ -621,6 +623,7 @@ function saveReport() {
 .risk-score { color: #b33e3e; }
 .risk-badge { background: #fde5e5; color: #a53e3e; }
 .risk-alert { display: flex; gap: 18rpx; padding: 20rpx; border-radius: 18rpx; background: #fff2f1; color: #8e3333; margin-bottom: 26rpx; }
+.risk-copy { color: #8e3333; }
 .score-inner {
 	width: 100%;
 	height: 100%;

@@ -295,7 +295,7 @@ function submit() {
 }
 .expert-list { display: flex; flex-direction: column; gap: 18rpx; }
 .expert-card { display: flex; gap: 20rpx; padding: 20rpx; align-items: flex-start; }
-.expert-card > image, .expert-card > .artwork { width: 150rpx; height: 150rpx; flex: 0 0 150rpx; border-radius: 24rpx; overflow: hidden; }
+.expert-card > image, .expert-card > .artwork { width: 150rpx; height: 150rpx; padding-top: 0 !important; flex: 0 0 150rpx; border-radius: 24rpx; overflow: hidden; }
 .expert-photo { object-fit: cover; }
 .expert-copy { min-width: 0; flex: 1; }
 .expert-tags { display: flex; flex-wrap: wrap; gap: 8rpx; margin-top: 14rpx; }
