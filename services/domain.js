@@ -23,11 +23,18 @@ export function calculateAssessmentScore(scale, answers) {
 	const max = Number(scoring.maxScore) || scale.count * Math.max(...values);
 	return Math.round((total / max) * 100);
 }
-export function evaluateAssessmentRisk(scale, score) {
+export function evaluateAssessmentRisk(scale, score, answers = []) {
 	const rules = scale?.crisisRules;
-	if (!rules || rules.direction === "none") return { level: "normal", reason: "" };
+	if (!rules) return { level: "normal", reason: "" };
 	const threshold = Number(rules.threshold);
-	const triggered = rules.direction === "low" ? score <= threshold : score >= threshold;
+	const answerIndex = Number.isInteger(Number(rules.answerIndex)) ? Number(rules.answerIndex) : -1;
+	const answerMin = Number(rules.answerMin);
+	const answerTriggered = answerIndex >= 0 && Number.isFinite(answerMin)
+		&& Number(answers[answerIndex]) >= answerMin;
+	const scoreTriggered = rules.direction === "none"
+		? false
+		: rules.direction === "low" ? score <= threshold : score >= threshold;
+	const triggered = answerTriggered || scoreTriggered;
 	return triggered
 		? { level: rules.level || "high", reason: rules.reason || "测评结果提示需要进一步关注。" }
 		: { level: "normal", reason: "" };

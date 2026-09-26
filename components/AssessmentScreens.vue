@@ -317,7 +317,7 @@ const props = defineProps({
 	mode: String,
 	params: { type: Object, default: () => ({}) },
 });
-const categories = ["全部", "幸福感", "人格", "情绪智商", "情绪", "睡眠", "压力", "人际", "职业", "认知", "气质"];
+const categories = ["全部", "幸福感", "抑郁", "焦虑", "人格", "情绪智商", "情绪", "睡眠", "压力", "人际", "职业", "认知", "气质"];
 const banners = computed(() => allBanners().filter((item) => item?.id && typeof item.image === 'string' && /^(builtin:(hero|rest)|\/profile\/upload\/[A-Za-z0-9/_-]+\.(png|jpe?g|webp))$/.test(item.image)));
 const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8080").replace(/\/$/, "");
 const bannerImageUrl = (path) => `${apiBase}${path}`;
@@ -393,7 +393,7 @@ function nextQuestion() {
 		return;
 	}
 	const score = calculateAssessmentScore(scale.value, answers.value);
-	const risk = evaluateAssessmentRisk(scale.value, score);
+	const risk = evaluateAssessmentRisk(scale.value, score, answers.value);
 	const record = {
 		id: id("report"),
 		scaleId: scale.value.id,
@@ -445,7 +445,7 @@ const metrics = computed(() =>
 const reportScale = computed(() => allScales().find((item) => item.id === report.value.scaleId));
 const reportRisk = computed(() => report.value.riskLevel && report.value.riskLevel !== "normal"
 	? { level: report.value.riskLevel, reason: report.value.riskReason || "测评结果提示需要进一步关注。" }
-	: evaluateAssessmentRisk(reportScale.value, Number(report.value.score) || 0));
+	: evaluateAssessmentRisk(reportScale.value, Number(report.value.score) || 0, report.value.answers || []));
 const scoreLabel = computed(() => reportScale.value?.scoring?.label || "状态指数");
 const reportPercent = computed(() => {
 	const max = Number(reportScale.value?.scoring?.maxScore) || 100;

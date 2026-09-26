@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
 	calculateScore,
+	evaluateAssessmentRisk,
 	validateContact,
 	validateEnrollment,
 	parseScale,
@@ -64,4 +65,19 @@ test("导入量表拒绝非法结构并计算题数", () => {
 		parseScale('{"title":"量表","questions":["问题一","问题二"]}').count,
 		2,
 	);
+});
+test("答案级危机规则可触发预警，即使总分未达到阈值", () => {
+	const scale = {
+		crisisRules: {
+			direction: "high",
+			threshold: 15,
+			answerIndex: 8,
+			answerMin: 1,
+			level: "high",
+			reason: "请尽快寻求支持",
+		},
+	};
+	assert.equal(evaluateAssessmentRisk(scale, 1, [0, 0, 0, 0, 0, 0, 0, 0, 1]).level, "high");
+	assert.equal(evaluateAssessmentRisk(scale, 1, [0, 0, 0, 0, 0, 0, 0, 0, 0]).level, "normal");
+	assert.equal(evaluateAssessmentRisk({ crisisRules: { direction: "none", answerIndex: 0, answerMin: 1, level: "high" } }, 0, [1]).level, "high");
 });
